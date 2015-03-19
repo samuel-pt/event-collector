@@ -35,9 +35,6 @@ class MockSink(object):
     def put(self, event):
         self.events.append(event)
 
-    def put_error(self, error, request):
-        self.events.append({"error": error})
-
 
 class CollectorUnitTests(unittest.TestCase):
     def setUp(self):

@@ -53,6 +53,11 @@ def constant_time_compare(actual, expected):
     return result == 0
 
 
+def make_error_event(request, code):
+    """Create an event representing a request error."""
+    return {"error": code}
+
+
 class EventCollector(object):
     """The event collector.
 
@@ -83,15 +88,18 @@ class EventCollector(object):
         """
 
         if request.content_length > _MAXIMUM_CONTENT_LENGTH:
-            self.sink.put_error("TOO_BIG", request)
+            error = make_error_event(request, "TOO_BIG")
+            self.sink.put(error)
             return HTTPRequestEntityTooLarge()
 
         if not request.headers.get("Date"):
-            self.sink.put_error("NO_DATE", request)
+            error = make_error_event(request, "NO_DATE")
+            self.sink.put(error)
             return HTTPBadRequest("no date provided")
 
         if not request.headers.get("User-Agent"):
-            self.sink.put_error("NO_USERAGENT", request)
+            error = make_error_event(request, "NO_USERAGENT")
+            self.sink.put(error)
             return HTTPBadRequest("no user-agent provided")
 
         signature_header = request.headers.get("X-Signature", "")
@@ -100,17 +108,20 @@ class EventCollector(object):
         body = request.body
         expected_mac = hmac.new(key, body, hashlib.sha256).hexdigest()
         if not constant_time_compare(expected_mac, mac or ""):
-            self.sink.put_error("INVALID_MAC", request)
+            error = make_error_event(request, "INVALID_MAC")
+            self.sink.put(error)
             return HTTPForbidden()
 
         try:
             batch = json.loads(body)
         except ValueError:
-            self.sink.put_error("INVALID_PAYLOAD", request)
+            error = make_error_event(request, "INVALID_PAYLOAD")
+            self.sink.put(error)
             return HTTPBadRequest("invalid json")
 
         if not isinstance(batch, list):
-            self.sink.put_error("INVALID_PAYLOAD", request)
+            error = make_error_event(request, "INVALID_PAYLOAD")
+            self.sink.put(error)
             return HTTPBadRequest("json root object must be a list")
 
         for item in batch:
@@ -124,10 +135,6 @@ class StubSink(object):
     def put(self, event):
         """Put an event into the event queue."""
         _LOG.warn(event)
-
-    def put_error(self, error, request):
-        """Make and put an error marker into the event queue."""
-        _LOG.error(error)
 
 
 def health_check(request):
