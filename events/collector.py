@@ -68,9 +68,10 @@ class EventCollector(object):
 
     """
 
-    def __init__(self, keystore, sink):
+    def __init__(self, keystore, event_sink, error_sink):
         self.keystore = keystore
-        self.sink = sink
+        self.event_sink = event_sink
+        self.error_sink = error_sink
 
     def process_request(self, request):
         """Consume an event batch request and return an appropriate response.
@@ -89,17 +90,17 @@ class EventCollector(object):
 
         if request.content_length > _MAXIMUM_CONTENT_LENGTH:
             error = make_error_event(request, "TOO_BIG")
-            self.sink.put(error)
+            self.error_sink.put(error)
             return HTTPRequestEntityTooLarge()
 
         if not request.headers.get("Date"):
             error = make_error_event(request, "NO_DATE")
-            self.sink.put(error)
+            self.error_sink.put(error)
             return HTTPBadRequest("no date provided")
 
         if not request.headers.get("User-Agent"):
             error = make_error_event(request, "NO_USERAGENT")
-            self.sink.put(error)
+            self.error_sink.put(error)
             return HTTPBadRequest("no user-agent provided")
 
         signature_header = request.headers.get("X-Signature", "")
@@ -109,23 +110,23 @@ class EventCollector(object):
         expected_mac = hmac.new(key, body, hashlib.sha256).hexdigest()
         if not constant_time_compare(expected_mac, mac or ""):
             error = make_error_event(request, "INVALID_MAC")
-            self.sink.put(error)
+            self.error_sink.put(error)
             return HTTPForbidden()
 
         try:
             batch = json.loads(body)
         except ValueError:
             error = make_error_event(request, "INVALID_PAYLOAD")
-            self.sink.put(error)
+            self.error_sink.put(error)
             return HTTPBadRequest("invalid json")
 
         if not isinstance(batch, list):
             error = make_error_event(request, "INVALID_PAYLOAD")
-            self.sink.put(error)
+            self.error_sink.put(error)
             return HTTPBadRequest("json root object must be a list")
 
         for item in batch:
-            self.sink.put(item)
+            self.event_sink.put(item)
         return Response()
 
 
@@ -157,8 +158,9 @@ def make_app(global_config, **settings):
             key_secret = base64.b64decode(value)
             keystore[key_name] = key_secret
 
-    sink = StubSink()
-    collector = EventCollector(keystore, sink)
+    event_sink = StubSink()
+    error_sink = StubSink()
+    collector = EventCollector(keystore, event_sink, error_sink)
     config.add_route("v1", "/v1", request_method="POST")
     config.add_view(collector.process_request, route_name="v1")
     config.add_route("health", "/health")

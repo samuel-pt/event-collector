@@ -41,8 +41,13 @@ class CollectorUnitTests(unittest.TestCase):
         keystore = {
             "TestKey1": "test",
         }
-        self.sink = MockSink()
-        self.collector = collector.EventCollector(keystore, self.sink)
+        self.event_sink = MockSink()
+        self.error_sink = MockSink()
+        self.collector = collector.EventCollector(
+            keystore,
+            self.event_sink,
+            self.error_sink,
+        )
 
     def test_simple_batch(self):
         request = testing.DummyRequest()
@@ -54,14 +59,16 @@ class CollectorUnitTests(unittest.TestCase):
         response = self.collector.process_request(request)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(request.body), self.sink.events)
+        self.assertEqual(json.loads(request.body), self.event_sink.events)
+        self.assertEqual(self.error_sink.events, [])
 
     def test_max_length_enforced(self):
         request = testing.DummyRequest()
         request.content_length = 50 * 1024
         response = self.collector.process_request(request)
         self.assertEqual(response.status_code, 413)
-        self.assertEqual(self.sink.events, [{"error": "TOO_BIG"}])
+        self.assertEqual(self.event_sink.events, [])
+        self.assertEqual(self.error_sink.events, [{"error": "TOO_BIG"}])
 
     def test_invalid_json(self):
         request = testing.DummyRequest()
@@ -72,7 +79,8 @@ class CollectorUnitTests(unittest.TestCase):
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
         self.assertEquals(response.status_code, 400)
-        self.assertEquals(self.sink.events, [{"error": "INVALID_PAYLOAD"}])
+        self.assertEqual(self.event_sink.events, [])
+        self.assertEquals(self.error_sink.events, [{"error": "INVALID_PAYLOAD"}])
 
     def test_not_a_batch(self):
         request = testing.DummyRequest()
@@ -83,7 +91,8 @@ class CollectorUnitTests(unittest.TestCase):
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(self.sink.events, [{"error": "INVALID_PAYLOAD"}])
+        self.assertEqual(self.event_sink.events, [])
+        self.assertEqual(self.error_sink.events, [{"error": "INVALID_PAYLOAD"}])
 
     def test_no_auth(self):
         request = testing.DummyRequest()
@@ -93,7 +102,8 @@ class CollectorUnitTests(unittest.TestCase):
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(self.sink.events, [{"error": "INVALID_MAC"}])
+        self.assertEqual(self.event_sink.events, [])
+        self.assertEqual(self.error_sink.events, [{"error": "INVALID_MAC"}])
 
     def test_unknown_key(self):
         request = testing.DummyRequest()
@@ -102,7 +112,8 @@ class CollectorUnitTests(unittest.TestCase):
         request.headers["X-Signature"] = "key=UnknownKey, mac=605cd49ebbc548885607c419e7aaafd1f97fd59c59cc099c8437fcd974c61705"
         response = self.collector.process_request(request)
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(self.sink.events, [{"error": "INVALID_MAC"}])
+        self.assertEqual(self.event_sink.events, [])
+        self.assertEqual(self.error_sink.events, [{"error": "INVALID_MAC"}])
 
     def test_invalid_mac(self):
         request = testing.DummyRequest()
@@ -113,7 +124,8 @@ class CollectorUnitTests(unittest.TestCase):
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
         self.assertEquals(response.status_code, 403)
-        self.assertEqual(self.sink.events, [{"error": "INVALID_MAC"}])
+        self.assertEqual(self.event_sink.events, [])
+        self.assertEqual(self.error_sink.events, [{"error": "INVALID_MAC"}])
 
     def test_date_not_provided(self):
         request = testing.DummyRequest()
@@ -123,7 +135,8 @@ class CollectorUnitTests(unittest.TestCase):
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
         self.assertEquals(response.status_code, 400)
-        self.assertEqual(self.sink.events, [{"error": "NO_DATE"}])
+        self.assertEqual(self.event_sink.events, [])
+        self.assertEqual(self.error_sink.events, [{"error": "NO_DATE"}])
 
     def test_useragent_not_provided(self):
         request = testing.DummyRequest()
@@ -133,7 +146,8 @@ class CollectorUnitTests(unittest.TestCase):
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
         self.assertEquals(response.status_code, 400)
-        self.assertEqual(self.sink.events, [{"error": "NO_USERAGENT"}])
+        self.assertEqual(self.event_sink.events, [])
+        self.assertEqual(self.error_sink.events, [{"error": "NO_USERAGENT"}])
 
 
 class CollectorFunctionalTests(unittest.TestCase):
