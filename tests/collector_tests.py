@@ -1,4 +1,3 @@
-import json
 import unittest
 
 import webtest
@@ -59,7 +58,9 @@ class CollectorUnitTests(unittest.TestCase):
         response = self.collector.process_request(request)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(request.body), self.event_sink.events)
+        self.assertEqual(
+            ['{"event1": "value"}', '{"event2": "value"}'],
+            self.event_sink.events)
         self.assertEqual(self.error_sink.events, [])
 
     def test_max_length_enforced(self):
@@ -148,6 +149,18 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEquals(response.status_code, 400)
         self.assertEqual(self.event_sink.events, [])
         self.assertEqual(self.error_sink.events, [{"error": "NO_USERAGENT"}])
+
+    def test_event_too_large(self):
+        request = testing.DummyRequest()
+        request.headers["User-Agent"] = "TestApp/1.0"
+        request.headers["X-Signature"] = "key=TestKey1, mac=0dc28323c1a98b912867fdc726c21d6220927ba07f09c787311f498a02c399eb"
+        request.headers["Date"] = "Thu, 17 Nov 2011 06:25:24 GMT"
+        request.body = '[{"event1": "' + ("value" * 1100) + '"}]'
+        request.content_length = len(request.body)
+        response = self.collector.process_request(request)
+        self.assertEqual(self.event_sink.events, [])
+        self.assertEqual(self.error_sink.events, [{"error": "EVENT_TOO_BIG"}])
+        self.assertEquals(response.status_code, 413)
 
 
 class CollectorFunctionalTests(unittest.TestCase):

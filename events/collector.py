@@ -16,6 +16,7 @@ from pyramid.response import Response
 
 
 _MAXIMUM_CONTENT_LENGTH = 40 * 1024
+_MAXIMUM_EVENT_SIZE = 4096
 _LOG = logging.getLogger(__name__)
 
 
@@ -125,7 +126,16 @@ class EventCollector(object):
             self.error_sink.put(error)
             return HTTPBadRequest("json root object must be a list")
 
+        reserialized_items = []
         for item in batch:
+            reserialized = json.dumps(item)
+            if len(reserialized) > _MAXIMUM_EVENT_SIZE:
+                error = make_error_event(request, "EVENT_TOO_BIG")
+                self.error_sink.put(error)
+                return HTTPRequestEntityTooLarge()
+            reserialized_items.append(reserialized)
+
+        for item in reserialized_items:
             self.event_sink.put(item)
         return Response()
 
