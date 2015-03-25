@@ -1,3 +1,4 @@
+import datetime
 import unittest
 
 from pyramid import testing
@@ -35,6 +36,12 @@ class MockSink(object):
 
 class CollectorUnitTests(unittest.TestCase):
     def setUp(self):
+        class MockDatetime(datetime.datetime):
+            @classmethod
+            def utcnow(cls):
+                return datetime.datetime(2015, 11, 17, 12, 34, 56)
+        datetime.datetime = MockDatetime
+
         keystore = {
             "TestKey1": "test",
         }
@@ -51,18 +58,23 @@ class CollectorUnitTests(unittest.TestCase):
         request.headers["User-Agent"] = "TestApp/1.0"
         request.headers["X-Signature"] = "key=TestKey1, mac=d7aab40b9db8ae0e0b40d98e9c50b2cfc80ca06127b42fbbbdf146752b47a5ed"
         request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.body = '[{"event1": "value"}, {"event2": "value"}]'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            ['{"event1": "value"}', '{"event2": "value"}'],
+            [
+                '{"ip": "1.2.3.4", "event": {"event1": "value"}, "time": "2015-11-17T12:34:56"}',
+                '{"ip": "1.2.3.4", "event": {"event2": "value"}, "time": "2015-11-17T12:34:56"}',
+            ],
             self.event_sink.events)
         self.assertEqual(self.error_sink.events, [])
 
     def test_max_length_enforced(self):
         request = testing.DummyRequest()
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.content_length = 50 * 1024
         response = self.collector.process_request(request)
         self.assertEqual(response.status_code, 413)
@@ -74,6 +86,7 @@ class CollectorUnitTests(unittest.TestCase):
         request.headers["User-Agent"] = "TestApp/1.0"
         request.headers["X-Signature"] = "key=TestKey1, mac=f8d929da113ab741eb173359f2bf28074f0ede5a2565a86389c35dd2c7ff7f6c"
         request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.body = '!!!'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
@@ -86,6 +99,7 @@ class CollectorUnitTests(unittest.TestCase):
         request.headers["User-Agent"] = "TestApp/1.0"
         request.headers["X-Signature"] = "key=TestKey1, mac=605cd49ebbc548885607c419e7aaafd1f97fd59c59cc099c8437fcd974c61705"
         request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.body = '{"event1": "value"}'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
@@ -97,6 +111,7 @@ class CollectorUnitTests(unittest.TestCase):
         request = testing.DummyRequest()
         request.headers["User-Agent"] = "TestApp/1.0"
         request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.body = '{"event1": "value"}'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
@@ -109,6 +124,7 @@ class CollectorUnitTests(unittest.TestCase):
         request.headers["User-Agent"] = "TestApp/1.0"
         request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
         request.headers["X-Signature"] = "key=UnknownKey, mac=605cd49ebbc548885607c419e7aaafd1f97fd59c59cc099c8437fcd974c61705"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
         response = self.collector.process_request(request)
         self.assertEqual(response.status_code, 403)
         self.assertEqual(len(self.event_sink.events), 0)
@@ -119,6 +135,7 @@ class CollectorUnitTests(unittest.TestCase):
         request.headers["User-Agent"] = "TestApp/1.0"
         request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
         request.headers["X-Signature"] = "key=TestKey1, mac=INVALID"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.body = '!!!'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
@@ -130,6 +147,7 @@ class CollectorUnitTests(unittest.TestCase):
         request = testing.DummyRequest()
         request.headers["User-Agent"] = "TestApp/1.0"
         request.headers["X-Signature"] = "key=TestKey1, mac=d7aab40b9db8ae0e0b40d98e9c50b2cfc80ca06127b42fbbbdf146752b47a5ed"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.body = '[{"event1": "value"}, {"event2": "value"}]'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
@@ -141,6 +159,7 @@ class CollectorUnitTests(unittest.TestCase):
         request = testing.DummyRequest()
         request.headers["X-Signature"] = "key=TestKey1, mac=d7aab40b9db8ae0e0b40d98e9c50b2cfc80ca06127b42fbbbdf146752b47a5ed"
         request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.body = '[{"event1": "value"}, {"event2": "value"}]'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
@@ -153,6 +172,7 @@ class CollectorUnitTests(unittest.TestCase):
         request.headers["User-Agent"] = "TestApp/1.0"
         request.headers["X-Signature"] = "key=TestKey1, mac=0dc28323c1a98b912867fdc726c21d6220927ba07f09c787311f498a02c399eb"
         request.headers["Date"] = "Thu, 17 Nov 2011 06:25:24 GMT"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.body = '[{"event1": "' + ("value" * 1100) + '"}]'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)

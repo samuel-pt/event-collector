@@ -1,6 +1,7 @@
 """HTTP Frontend for the event collector service."""
 
 import base64
+import datetime
 import json
 import hashlib
 import hmac
@@ -18,7 +19,7 @@ from events import sink
 
 
 _MAXIMUM_CONTENT_LENGTH = 40 * 1024
-_MAXIMUM_EVENT_SIZE = 4096
+_MAXIMUM_EVENT_SIZE = 5120  # extra padding over spec for our wrapper
 _LOG = logging.getLogger(__name__)
 
 
@@ -56,9 +57,18 @@ def constant_time_compare(actual, expected):
     return result == 0
 
 
+def wrap_and_serialize_event(request, event):
+    """Wrap the client-sent event with some additional fields and serialize."""
+    return json.dumps({
+        "ip": request.environ["REMOTE_ADDR"],
+        "time": request.environ["events.start_time"].isoformat(),
+        "event": event,
+    })
+
+
 def make_error_event(request, code):
-    """Create an event representing a request error."""
-    return {"error": code}
+    """Create a serialized event representing a request error."""
+    return wrap_and_serialize_event(request, {"error": code})
 
 
 class EventCollector(object):
@@ -90,6 +100,8 @@ class EventCollector(object):
         put into the sink instead.
 
         """
+
+        request.environ["events.start_time"] = datetime.datetime.utcnow()
 
         if request.content_length > _MAXIMUM_CONTENT_LENGTH:
             error = make_error_event(request, "TOO_BIG")
@@ -130,7 +142,7 @@ class EventCollector(object):
 
         reserialized_items = []
         for item in batch:
-            reserialized = json.dumps(item)
+            reserialized = wrap_and_serialize_event(request, item)
             if len(reserialized) > _MAXIMUM_EVENT_SIZE:
                 error = make_error_event(request, "EVENT_TOO_BIG")
                 self.error_sink.put(error)
