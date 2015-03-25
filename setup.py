@@ -8,6 +8,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "pyramid",
+        "sysv_ipc",
     ],
     entry_points={
         "paste.app_factory": [

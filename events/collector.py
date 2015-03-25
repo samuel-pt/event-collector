@@ -14,6 +14,8 @@ from pyramid.httpexceptions import (
 )
 from pyramid.response import Response
 
+from events import sink
+
 
 _MAXIMUM_CONTENT_LENGTH = 40 * 1024
 _MAXIMUM_EVENT_SIZE = 4096
@@ -137,15 +139,8 @@ class EventCollector(object):
 
         for item in reserialized_items:
             self.event_sink.put(item)
+
         return Response()
-
-
-class StubSink(object):
-    """A temporary stub event sink."""
-
-    def put(self, event):
-        """Put an event into the event queue."""
-        _LOG.warn(event)
 
 
 def health_check(request):
@@ -168,8 +163,8 @@ def make_app(global_config, **settings):
             key_secret = base64.b64decode(value)
             keystore[key_name] = key_secret
 
-    event_sink = StubSink()
-    error_sink = StubSink()
+    event_sink = sink.make_sink("events", settings)
+    error_sink = sink.make_sink("errors", settings)
     collector = EventCollector(keystore, event_sink, error_sink)
     config.add_route("v1", "/v1", request_method="POST")
     config.add_view(collector.process_request, route_name="v1")

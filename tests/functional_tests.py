@@ -1,0 +1,41 @@
+import unittest
+
+import sysv_ipc
+import webtest
+
+from events import collector, sink
+
+
+class CollectorFunctionalTests(unittest.TestCase):
+    def setUp(self):
+        app = collector.make_app(global_config={}, **{
+            "key.TestKey1": "dGVzdA==",
+            "msgq.events": "0xcafe",
+            "msgq.errors": "0xdecaf",
+        })
+        self.test_app = webtest.TestApp(app)
+        self.events_sink = sink.SysVMessageQueueSink(key=0xcafe)
+        self.errors_sink = sink.SysVMessageQueueSink(key=0xdecaf)
+
+    def tearDown(self):
+        self.events_sink.queue.remove()
+        self.errors_sink.queue.remove()
+
+    def test_batch(self):
+        self.test_app.post("/v1",
+            '[{"event1": "value"}, {"event2": "value"}]',
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "TestApp/1.0",
+                "Date": "Wed, 25 Nov 2015 06:25:24 GMT",
+                "X-Signature": "key=TestKey1, mac=d7aab40b9db8ae0e0b40d98e9c50b2cfc80ca06127b42fbbbdf146752b47a5ed",
+            },
+        )
+
+        event1, ignored = self.events_sink.queue.receive(block=False)
+        self.assertEqual(event1, '{"event1": "value"}')
+        event2, ignored = self.events_sink.queue.receive(block=False)
+        self.assertEqual(event2, '{"event2": "value"}')
+
+        with self.assertRaises(sysv_ipc.BusyError):
+            self.errors_sink.queue.receive(block=False)
