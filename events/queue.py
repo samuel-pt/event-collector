@@ -1,4 +1,10 @@
+import time
+
 import sysv_ipc
+
+
+# how long to sleep when no items are in the message queue (seconds)
+BUSY_WAIT = 0.05
 
 
 class QueueFullError(Exception):
@@ -33,6 +39,22 @@ class SysVMessageQueue(object):
             self.queue.send(event, block=False)
         except sysv_ipc.BusyError as e:
             raise QueueFullError(e)
+
+    def consume(self):
+        """Consume messages from the message queue and return them.
+
+        If no messages are available, this will sleep BUSY_WAIT seconds and
+        return None.
+
+        """
+        while True:
+            try:
+                message, _ = self.queue.receive(block=False)
+            except sysv_ipc.BusyError:
+                time.sleep(BUSY_WAIT)
+                yield None
+            else:
+                yield message
 
 
 def make_queue(name, settings):

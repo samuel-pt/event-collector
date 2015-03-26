@@ -9,6 +9,10 @@ setup(
     install_requires=[
         "pyramid",
         "sysv_ipc",
+        "boto",
+    ],
+    tests_require=[
+        "mock",
     ],
     entry_points={
         "paste.app_factory": [

@@ -1,5 +1,7 @@
 import unittest
 
+import mock
+
 import events.queue
 
 
@@ -44,3 +46,18 @@ class SysVMessageQueueTests(unittest.TestCase):
             # eventually
             while True:
                 queue.put("Example" * 100)
+
+    def test_consume_empty(self):
+        queue = self._make_queue(key=0x5ca1ab1e)
+        iterator = queue.consume()
+        with mock.patch("time.sleep") as mock_sleep:
+            item = iterator.next()
+            self.assertTrue(mock_sleep.called)
+        self.assertEqual(item, None)
+
+    def test_consume_with_items(self):
+        queue = self._make_queue(key=0x5ca1ab1e)
+        queue.put("example")
+        iterator = queue.consume()
+        item = iterator.next()
+        self.assertEqual(item, "example")
