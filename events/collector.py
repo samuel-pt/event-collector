@@ -130,6 +130,13 @@ class StubSink(object):
         _LOG.error(error)
 
 
+def health_check(request):
+    """A very simple health check endpoint."""
+    return {
+        "mood": u"\U0001F357",
+    }
+
+
 def make_app(global_config, **settings):
     """Paste entry point: return a configured WSGI application."""
 
@@ -147,5 +154,7 @@ def make_app(global_config, **settings):
     collector = EventCollector(keystore, sink)
     config.add_route("v1", "/v1", request_method="POST")
     config.add_view(collector.process_request, route_name="v1")
+    config.add_route("health", "/health")
+    config.add_view(health_check, route_name="health", renderer="json")
 
     return config.make_wsgi_app()
