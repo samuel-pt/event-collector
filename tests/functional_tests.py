@@ -4,7 +4,7 @@ import unittest
 import sysv_ipc
 import webtest
 
-from events import collector, sink
+from events import collector, queue
 
 
 class CollectorFunctionalTests(unittest.TestCase):
@@ -21,12 +21,12 @@ class CollectorFunctionalTests(unittest.TestCase):
             "msgq.errors": "0xdecaf",
         })
         self.test_app = webtest.TestApp(app)
-        self.events_sink = sink.SysVMessageQueueSink(key=0xcafe)
-        self.errors_sink = sink.SysVMessageQueueSink(key=0xdecaf)
+        self.events_queue = queue.SysVMessageQueue(key=0xcafe)
+        self.errors_queue = queue.SysVMessageQueue(key=0xdecaf)
 
     def tearDown(self):
-        self.events_sink.queue.remove()
-        self.errors_sink.queue.remove()
+        self.events_queue.queue.remove()
+        self.errors_queue.queue.remove()
 
     def test_batch(self):
         self.test_app.post("/v1",
@@ -42,10 +42,10 @@ class CollectorFunctionalTests(unittest.TestCase):
             },
         )
 
-        event1, ignored = self.events_sink.queue.receive(block=False)
+        event1, ignored = self.events_queue.queue.receive(block=False)
         self.assertEqual(event1, '{"ip": "1.2.3.4", "event": {"event1": "value"}, "time": "2015-11-17T12:34:56"}')
-        event2, ignored = self.events_sink.queue.receive(block=False)
+        event2, ignored = self.events_queue.queue.receive(block=False)
         self.assertEqual(event2, '{"ip": "1.2.3.4", "event": {"event2": "value"}, "time": "2015-11-17T12:34:56"}')
 
         with self.assertRaises(sysv_ipc.BusyError):
-            self.errors_sink.queue.receive(block=False)
+            self.errors_queue.queue.receive(block=False)

@@ -15,7 +15,7 @@ from pyramid.httpexceptions import (
 )
 from pyramid.response import Response
 
-from events import sink
+from events import queue
 
 
 _MAXIMUM_CONTENT_LENGTH = 40 * 1024
@@ -77,14 +77,14 @@ class EventCollector(object):
     It has two dependencies:
 
     * keystore: a mapping of key names to secret tokens.
-    * sink: an object that consumes events.
+    * queue: an object that consumes events.
 
     """
 
-    def __init__(self, keystore, event_sink, error_sink):
+    def __init__(self, keystore, event_queue, error_queue):
         self.keystore = keystore
-        self.event_sink = event_sink
-        self.error_sink = error_sink
+        self.event_queue = event_queue
+        self.error_queue = error_queue
 
     def process_request(self, request):
         """Consume an event batch request and return an appropriate response.
@@ -96,8 +96,8 @@ class EventCollector(object):
             * messages are signed with HMAC SHA-256
 
         If the payload is valid, the events it contains will be put onto the
-        event sink.  If there are issues with the request, error events will be
-        put into the sink instead.
+        event queue.  If there are issues with the request, error events will be
+        put into the error queue instead.
 
         """
 
@@ -105,17 +105,17 @@ class EventCollector(object):
 
         if request.content_length > _MAXIMUM_CONTENT_LENGTH:
             error = make_error_event(request, "TOO_BIG")
-            self.error_sink.put(error)
+            self.error_queue.put(error)
             return HTTPRequestEntityTooLarge()
 
         if not request.headers.get("Date"):
             error = make_error_event(request, "NO_DATE")
-            self.error_sink.put(error)
+            self.error_queue.put(error)
             return HTTPBadRequest("no date provided")
 
         if not request.headers.get("User-Agent"):
             error = make_error_event(request, "NO_USERAGENT")
-            self.error_sink.put(error)
+            self.error_queue.put(error)
             return HTTPBadRequest("no user-agent provided")
 
         signature_header = request.headers.get("X-Signature", "")
@@ -125,19 +125,19 @@ class EventCollector(object):
         expected_mac = hmac.new(key, body, hashlib.sha256).hexdigest()
         if not constant_time_compare(expected_mac, mac or ""):
             error = make_error_event(request, "INVALID_MAC")
-            self.error_sink.put(error)
+            self.error_queue.put(error)
             return HTTPForbidden()
 
         try:
             batch = json.loads(body)
         except ValueError:
             error = make_error_event(request, "INVALID_PAYLOAD")
-            self.error_sink.put(error)
+            self.error_queue.put(error)
             return HTTPBadRequest("invalid json")
 
         if not isinstance(batch, list):
             error = make_error_event(request, "INVALID_PAYLOAD")
-            self.error_sink.put(error)
+            self.error_queue.put(error)
             return HTTPBadRequest("json root object must be a list")
 
         reserialized_items = []
@@ -145,12 +145,12 @@ class EventCollector(object):
             reserialized = wrap_and_serialize_event(request, item)
             if len(reserialized) > _MAXIMUM_EVENT_SIZE:
                 error = make_error_event(request, "EVENT_TOO_BIG")
-                self.error_sink.put(error)
+                self.error_queue.put(error)
                 return HTTPRequestEntityTooLarge()
             reserialized_items.append(reserialized)
 
         for item in reserialized_items:
-            self.event_sink.put(item)
+            self.event_queue.put(item)
 
         return Response()
 
@@ -175,9 +175,9 @@ def make_app(global_config, **settings):
             key_secret = base64.b64decode(value)
             keystore[key_name] = key_secret
 
-    event_sink = sink.make_sink("events", settings)
-    error_sink = sink.make_sink("errors", settings)
-    collector = EventCollector(keystore, event_sink, error_sink)
+    event_queue = queue.make_queue("events", settings)
+    error_queue = queue.make_queue("errors", settings)
+    collector = EventCollector(keystore, event_queue, error_queue)
     config.add_route("v1", "/v1", request_method="POST")
     config.add_view(collector.process_request, route_name="v1")
     config.add_route("health", "/health")

@@ -1,7 +1,7 @@
 import sysv_ipc
 
 
-class SinkFullError(Exception):
+class QueueFullError(Exception):
     """The sink is full.
 
     It may have space again in the future, but at the moment writes are not
@@ -11,8 +11,8 @@ class SinkFullError(Exception):
     pass
 
 
-class SysVMessageQueueSink(object):
-    """A sink that uses System V IPC Message Queues for communication.
+class SysVMessageQueue(object):
+    """A queue using System V IPC Message Queues.
 
     Note: system-level tuning is required for this to work; the expected
     maximum message size is larger than most system defaults. See your OS's
@@ -28,15 +28,16 @@ class SysVMessageQueueSink(object):
         )
 
     def put(self, event):
+        """Put an item on the queue or raise QueueFullError."""
         try:
             self.queue.send(event, block=False)
         except sysv_ipc.BusyError as e:
-            raise SinkFullError(e)
+            raise QueueFullError(e)
 
 
-def make_sink(name, settings):
-    """Create a sink object for the specified topic name."""
+def make_queue(name, settings):
+    """Create a queue object for the specified topic name."""
 
     raw_key = settings["msgq." + name]
     key = int(raw_key, 16)
-    return SysVMessageQueueSink(key=key)
+    return SysVMessageQueue(key=key)
