@@ -15,7 +15,7 @@ from pyramid.httpexceptions import (
 )
 from pyramid.response import Response
 
-from events import queue
+from events import stats, queue
 
 
 _MAXIMUM_CONTENT_LENGTH = 40 * 1024
@@ -81,8 +81,9 @@ class EventCollector(object):
 
     """
 
-    def __init__(self, keystore, event_queue, error_queue):
+    def __init__(self, keystore, stats_client, event_queue, error_queue):
         self.keystore = keystore
+        self.stats_client = stats_client
         self.event_queue = event_queue
         self.error_queue = error_queue
 
@@ -104,16 +105,19 @@ class EventCollector(object):
         request.environ["events.start_time"] = datetime.datetime.utcnow()
 
         if request.content_length > _MAXIMUM_CONTENT_LENGTH:
+            self.stats_client.count("client-error.too-big")
             error = make_error_event(request, "TOO_BIG")
             self.error_queue.put(error)
             return HTTPRequestEntityTooLarge()
 
         if not request.headers.get("Date"):
+            self.stats_client.count("client-error.no-date")
             error = make_error_event(request, "NO_DATE")
             self.error_queue.put(error)
             return HTTPBadRequest("no date provided")
 
         if not request.headers.get("User-Agent"):
+            self.stats_client.count("client-error.no-useragent")
             error = make_error_event(request, "NO_USERAGENT")
             self.error_queue.put(error)
             return HTTPBadRequest("no user-agent provided")
@@ -124,6 +128,7 @@ class EventCollector(object):
         body = request.body
         expected_mac = hmac.new(key, body, hashlib.sha256).hexdigest()
         if not constant_time_compare(expected_mac, mac or ""):
+            self.stats_client.count("client-error.invalid-mac")
             error = make_error_event(request, "INVALID_MAC")
             self.error_queue.put(error)
             return HTTPForbidden()
@@ -131,11 +136,13 @@ class EventCollector(object):
         try:
             batch = json.loads(body)
         except ValueError:
+            self.stats_client.count("client-error.invalid-payload")
             error = make_error_event(request, "INVALID_PAYLOAD")
             self.error_queue.put(error)
             return HTTPBadRequest("invalid json")
 
         if not isinstance(batch, list):
+            self.stats_client.count("client-error.invalid-payload")
             error = make_error_event(request, "INVALID_PAYLOAD")
             self.error_queue.put(error)
             return HTTPBadRequest("json root object must be a list")
@@ -144,6 +151,7 @@ class EventCollector(object):
         for item in batch:
             reserialized = wrap_and_serialize_event(request, item)
             if len(reserialized) > _MAXIMUM_EVENT_SIZE:
+                self.stats_client.count("client-error.too-big")
                 error = make_error_event(request, "EVENT_TOO_BIG")
                 self.error_queue.put(error)
                 return HTTPRequestEntityTooLarge()
@@ -151,6 +159,8 @@ class EventCollector(object):
 
         for item in reserialized_items:
             self.event_queue.put(item)
+
+        self.stats_client.count("collected.http", count=len(reserialized_items))
 
         return Response()
 
@@ -175,9 +185,10 @@ def make_app(global_config, **settings):
             key_secret = base64.b64decode(value)
             keystore[key_name] = key_secret
 
+    stats_client = stats.make_stats_client(settings)
     event_queue = queue.make_queue("events", settings)
     error_queue = queue.make_queue("errors", settings)
-    collector = EventCollector(keystore, event_queue, error_queue)
+    collector = EventCollector(keystore, stats_client, event_queue, error_queue)
     config.add_route("v1", "/v1", request_method="POST")
     config.add_view(collector.process_request, route_name="v1")
     config.add_route("health", "/health")

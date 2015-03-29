@@ -50,27 +50,26 @@ class BatcherTests(unittest.TestCase):
 
 
 class KinesisBatchConsumerTests(unittest.TestCase):
+    def setUp(self):
+        self.mock_stats_client = mock.MagicMock()
+        self.mock_kinesis = mock.MagicMock()
+        self.batch_consumer = injector.KinesisBatchConsumer(
+            self.mock_kinesis, "topic", self.mock_stats_client)
+
     def test_get_item_size(self):
-        batch_consumer = injector.KinesisBatchConsumer(None, "topic")
-        size = batch_consumer.get_item_size("test")
+        size = self.batch_consumer.get_item_size("test")
         self.assertEqual(size, 5)
 
     def test_consume(self):
-        mock_kinesis = mock.MagicMock()
-        batch_consumer = injector.KinesisBatchConsumer(mock_kinesis, "topic")
-
         with mock.patch("uuid.uuid4") as mock_uuid1:
             mock_uuid1.return_value = "not_actually_a_uuid"
-            batch_consumer.consume_batch(["first", "second", "third"])
+            self.batch_consumer.consume_batch(["first", "second", "third"])
 
-        mock_kinesis.put_record.assert_called_once_with(
+        self.mock_kinesis.put_record.assert_called_once_with(
             "topic", "first\nsecond\nthird", "not_actually_a_uuid")
 
     def test_throughput_exceeded(self):
-        mock_kinesis = mock.MagicMock()
-        batch_consumer = injector.KinesisBatchConsumer(mock_kinesis, "topic")
-
-        mock_kinesis.put_record.side_effect = [
+        self.mock_kinesis.put_record.side_effect = [
             ProvisionedThroughputExceededException(400, "too"),
             ProvisionedThroughputExceededException(400, "fast"),
             ProvisionedThroughputExceededException(400, "yikes"),
@@ -78,7 +77,7 @@ class KinesisBatchConsumerTests(unittest.TestCase):
         ]
 
         with mock.patch("time.sleep") as mock_sleep:
-            batch_consumer.consume_batch(["a", "b", "c"])
+            self.batch_consumer.consume_batch(["a", "b", "c"])
             mock_sleep.assert_has_calls([
                 mock.call(1),
                 mock.call(2),

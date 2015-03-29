@@ -1,6 +1,8 @@
 import datetime
 import unittest
 
+import mock
+
 from pyramid import testing
 
 from events import collector
@@ -47,8 +49,10 @@ class CollectorUnitTests(unittest.TestCase):
         }
         self.event_sink = MockSink()
         self.error_sink = MockSink()
+        self.mock_stats_client = mock.MagicMock()
         self.collector = collector.EventCollector(
             keystore,
+            self.mock_stats_client,
             self.event_sink,
             self.error_sink,
         )
