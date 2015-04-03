@@ -1,0 +1,2 @@
+upstart/event-injector.conf etc/init
+upstart/event-injectors.conf etc/init

@@ -1,0 +1,4 @@
+# these don't matter as we're only installing upstart scripts
+# https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=717302
+eventcollector binary: init.d-script-not-marked-as-conffile
+eventcollector binary: init.d-script-not-included-in-package
