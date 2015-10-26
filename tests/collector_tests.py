@@ -183,3 +183,23 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEquals(response.status_code, 413)
         self.assertEqual(len(self.event_sink.events), 0)
         self.assertEqual(len(self.error_sink.events), 1)
+
+    def test_key_in_urlparams(self):
+        request = testing.DummyRequest()
+        request.headers["User-Agent"] = "TestApp/1.0"
+        request.GET["key"] = "TestKey1"
+        request.GET["mac"] = "d7aab40b9db8ae0e0b40d98e9c50b2cfc80ca06127b42fbbbdf146752b47a5ed"
+        request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
+        request.body = '[{"event1": "value"}, {"event2": "value"}]'
+        request.content_length = len(request.body)
+        response = self.collector.process_request(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [
+                '{"ip": "1.2.3.4", "event": {"event1": "value"}, "time": "2015-11-17T12:34:56"}',
+                '{"ip": "1.2.3.4", "event": {"event2": "value"}, "time": "2015-11-17T12:34:56"}',
+            ],
+            self.event_sink.events)
+        self.assertEqual(self.error_sink.events, [])

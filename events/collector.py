@@ -122,8 +122,14 @@ class EventCollector(object):
             self.error_queue.put(error)
             return HTTPBadRequest("no user-agent provided")
 
-        signature_header = request.headers.get("X-Signature", "")
-        keyname, mac = parse_signature(signature_header)
+        try:
+            signature_header = request.headers["X-Signature"]
+        except KeyError:
+            keyname = request.GET.get("key", "")
+            mac = request.GET.get("mac", "")
+        else:
+            keyname, mac = parse_signature(signature_header)
+
         key = self.keystore.get(keyname, "INVALID")
         body = request.body
         expected_mac = hmac.new(key, body, hashlib.sha256).hexdigest()
