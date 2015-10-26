@@ -19,6 +19,7 @@ class CollectorFunctionalTests(unittest.TestCase):
             "key.TestKey1": "dGVzdA==",
             "msgq.events": "0xcafe",
             "msgq.errors": "0xdecaf",
+            "allowed_origins": "",
         })
         self.test_app = webtest.TestApp(app)
         self.events_queue = queue.SysVMessageQueue(key=0xcafe)

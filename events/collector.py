@@ -6,6 +6,7 @@ import json
 import hashlib
 import hmac
 import logging
+import urlparse
 
 from pyramid.config import Configurator
 from pyramid.httpexceptions import (
@@ -21,6 +22,34 @@ from events import stats, queue
 _MAXIMUM_CONTENT_LENGTH = 40 * 1024
 _MAXIMUM_EVENT_SIZE = 5120  # extra padding over spec for our wrapper
 _LOG = logging.getLogger(__name__)
+
+
+def is_subdomain(domain, base_domain):
+    """Return whether or not domain is a subdomain of base_domain."""
+    return domain == base_domain or domain.endswith("." + base_domain)
+
+
+def is_allowed_origin(origin, whitelist):
+    """Check if the reported origin of a request is on a given whitelist."""
+    # if there's no whitelist, assume all is ok
+    if whitelist == ["*"]:
+        return True
+
+    try:
+        parsed = urlparse.urlparse(origin)
+    except ValueError:
+        return False
+
+    if parsed.scheme not in ("http", "https"):
+        return False
+
+    if parsed.port is not None and parsed.port not in (80, 443):
+        return False
+
+    for domain in whitelist:
+        if is_subdomain(parsed.hostname, domain):
+            return True
+    return False
 
 
 def parse_signature(header):
@@ -81,11 +110,12 @@ class EventCollector(object):
 
     """
 
-    def __init__(self, keystore, stats_client, event_queue, error_queue):
+    def __init__(self, keystore, stats_client, event_queue, error_queue, allowed_origins):
         self.keystore = keystore
         self.stats_client = stats_client
         self.event_queue = event_queue
         self.error_queue = error_queue
+        self.allowed_origins = allowed_origins
 
     def process_request(self, request):
         """Consume an event batch request and return an appropriate response.
@@ -168,7 +198,16 @@ class EventCollector(object):
 
         self.stats_client.count("collected.http", count=len(reserialized_items))
 
-        return Response()
+        headers = {}
+
+        origin = request.headers.get("Origin")
+        if origin and is_allowed_origin(origin, self.allowed_origins):
+            headers.update({
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST",
+            })
+
+        return Response(headers=headers)
 
 
 def health_check(request):
@@ -191,10 +230,14 @@ def make_app(global_config, **settings):
             key_secret = base64.b64decode(value)
             keystore[key_name] = key_secret
 
+    allowed_origins = [
+        x.strip() for x in settings["allowed_origins"].split(",") if x.strip()]
+
     stats_client = stats.make_stats_client(settings)
     event_queue = queue.make_queue("events", settings)
     error_queue = queue.make_queue("errors", settings)
-    collector = EventCollector(keystore, stats_client, event_queue, error_queue)
+    collector = EventCollector(
+        keystore, stats_client, event_queue, error_queue, allowed_origins)
     config.add_route("v1", "/v1", request_method="POST")
     config.add_view(collector.process_request, route_name="v1")
     config.add_route("health", "/health")

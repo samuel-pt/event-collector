@@ -50,11 +50,13 @@ class CollectorUnitTests(unittest.TestCase):
         self.event_sink = MockSink()
         self.error_sink = MockSink()
         self.mock_stats_client = mock.MagicMock()
+        self.allowed_origins = []
         self.collector = collector.EventCollector(
             keystore,
             self.mock_stats_client,
             self.event_sink,
             self.error_sink,
+            self.allowed_origins,
         )
 
     def test_simple_batch(self):
@@ -75,6 +77,7 @@ class CollectorUnitTests(unittest.TestCase):
             ],
             self.event_sink.events)
         self.assertEqual(self.error_sink.events, [])
+        self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), None)
 
     def test_max_length_enforced(self):
         request = testing.DummyRequest()
@@ -203,3 +206,48 @@ class CollectorUnitTests(unittest.TestCase):
             ],
             self.event_sink.events)
         self.assertEqual(self.error_sink.events, [])
+
+    def test_cors_if_open(self):
+        self.allowed_origins.append("*")
+
+        request = testing.DummyRequest()
+        request.headers["User-Agent"] = "TestApp/1.0"
+        request.headers["X-Signature"] = "key=TestKey1, mac=d7aab40b9db8ae0e0b40d98e9c50b2cfc80ca06127b42fbbbdf146752b47a5ed"
+        request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.headers["Origin"] = "https://www.example.com"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
+        request.body = '[{"event1": "value"}, {"event2": "value"}]'
+        request.content_length = len(request.body)
+        response = self.collector.process_request(request)
+
+        self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), "*")
+
+    def test_cors_if_authorized(self):
+        self.allowed_origins.append("example.com")
+
+        request = testing.DummyRequest()
+        request.headers["User-Agent"] = "TestApp/1.0"
+        request.headers["X-Signature"] = "key=TestKey1, mac=d7aab40b9db8ae0e0b40d98e9c50b2cfc80ca06127b42fbbbdf146752b47a5ed"
+        request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.headers["Origin"] = "https://www.example.com"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
+        request.body = '[{"event1": "value"}, {"event2": "value"}]'
+        request.content_length = len(request.body)
+        response = self.collector.process_request(request)
+
+        self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), "*")
+
+    def test_no_cors_if_unauthorized(self):
+        self.allowed_origins.append("example.com")
+
+        request = testing.DummyRequest()
+        request.headers["User-Agent"] = "TestApp/1.0"
+        request.headers["X-Signature"] = "key=TestKey1, mac=d7aab40b9db8ae0e0b40d98e9c50b2cfc80ca06127b42fbbbdf146752b47a5ed"
+        request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.headers["Origin"] = "https://notexample.com"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
+        request.body = '[{"event1": "value"}, {"event2": "value"}]'
+        request.content_length = len(request.body)
+        response = self.collector.process_request(request)
+
+        self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), None)
