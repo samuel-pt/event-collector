@@ -251,3 +251,21 @@ class CollectorUnitTests(unittest.TestCase):
         response = self.collector.process_request(request)
 
         self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), None)
+
+    def test_text_plain(self):
+        # we need text/plain to work, even though it's gross and icky here, so
+        # that we can avoid a CORS preflight
+        self.allowed_origins.append("example.com")
+
+        request = testing.DummyRequest()
+        request.headers["User-Agent"] = "TestApp/1.0"
+        request.headers["X-Signature"] = "key=TestKey1, mac=d7aab40b9db8ae0e0b40d98e9c50b2cfc80ca06127b42fbbbdf146752b47a5ed"
+        request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.headers["Origin"] = "https://www.example.com"
+        request.headers["Content-Type"] = "text/plain"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
+        request.body = '[{"event1": "value"}, {"event2": "value"}]'
+        request.content_length = len(request.body)
+        response = self.collector.process_request(request)
+
+        self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), "*")
