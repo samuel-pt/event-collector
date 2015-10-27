@@ -22,6 +22,13 @@ from events import stats, queue
 _MAXIMUM_CONTENT_LENGTH = 40 * 1024
 _MAXIMUM_EVENT_SIZE = 5120  # extra padding over spec for our wrapper
 _LOG = logging.getLogger(__name__)
+_CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Max-Age": "1728000",  # 20 days
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "X-Signature",
+    "Vary": "Origin",
+}
 
 
 def is_subdomain(domain, base_domain):
@@ -117,6 +124,34 @@ class EventCollector(object):
         self.error_queue = error_queue
         self.allowed_origins = allowed_origins
 
+    def check_cors(self, request):
+        try:
+            origin = request.headers["Origin"]
+            requested_method = request.headers["Access-Control-Request-Method"]
+        except KeyError:
+            self.stats_client.count("cors.preflight.missing_headers")
+            raise HTTPForbidden()
+
+        headers_list = request.headers.get("Access-Control-Request-Headers", "")
+        requested_headers = [h.strip().lower() for h in headers_list.split(",") if h]
+        if requested_headers and requested_headers != ["x-signature"]:
+            self.stats_client.count("cors.preflight.bad_requested_headers")
+            raise HTTPForbidden()
+
+        if requested_method != "POST":
+            self.stats_client.count("cors.preflight.bad_method")
+            raise HTTPForbidden()
+
+        if not origin or not is_allowed_origin(origin, self.allowed_origins):
+            self.stats_client.count("cors.preflight.bad_origin")
+            raise HTTPForbidden()
+
+        self.stats_client.count("cors.preflight.allowed")
+        return Response(
+            status="204 No Content",
+            headers=_CORS_HEADERS,
+        )
+
     def process_request(self, request):
         """Consume an event batch request and return an appropriate response.
 
@@ -199,13 +234,9 @@ class EventCollector(object):
         self.stats_client.count("collected.http", count=len(reserialized_items))
 
         headers = {}
-
         origin = request.headers.get("Origin")
         if origin and is_allowed_origin(origin, self.allowed_origins):
-            headers.update({
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "POST",
-            })
+            headers.update(_CORS_HEADERS)
 
         return Response(headers=headers)
 
@@ -239,7 +270,9 @@ def make_app(global_config, **settings):
     collector = EventCollector(
         keystore, stats_client, event_queue, error_queue, allowed_origins)
     config.add_route("v1", "/v1", request_method="POST")
+    config.add_route("v1_options", "/v1", request_method="OPTIONS")
     config.add_view(collector.process_request, route_name="v1")
+    config.add_view(collector.check_cors, route_name="v1_options")
     config.add_route("health", "/health")
     config.add_view(health_check, route_name="health", renderer="json")
 

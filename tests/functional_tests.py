@@ -19,7 +19,7 @@ class CollectorFunctionalTests(unittest.TestCase):
             "key.TestKey1": "dGVzdA==",
             "msgq.events": "0xcafe",
             "msgq.errors": "0xdecaf",
-            "allowed_origins": "",
+            "allowed_origins": "example.com",
         })
         self.test_app = webtest.TestApp(app)
         self.events_queue = queue.SysVMessageQueue(key=0xcafe)
@@ -50,3 +50,12 @@ class CollectorFunctionalTests(unittest.TestCase):
 
         with self.assertRaises(sysv_ipc.BusyError):
             self.errors_queue.queue.receive(block=False)
+
+    def test_cors(self):
+        response = self.test_app.options("/v1", headers={
+            "Origin": "http://example.com",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "X-Signature",
+        })
+
+        self.assertEqual(response.status_code, 204)
