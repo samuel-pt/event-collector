@@ -1,3 +1,9 @@
+eventcollector (1.1) trusty; urgency=medium
+
+  * add support for CORS
+
+ -- Neil Williams <neil@reddit.com>  Wed, 28 Oct 2015 14:55:18 -0700
+
 eventcollector (1.0) trusty; urgency=low
 
   * Initial release.
