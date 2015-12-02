@@ -1,3 +1,10 @@
+eventcollector (1.2) trusty; urgency=medium
+
+  * increase maximum batch and event sizes
+  * remove hard check on Date header since XHR can't send it
+
+ -- Neil Williams <neil@reddit.com>  Wed, 02 Dec 2015 11:27:57 -0800
+
 eventcollector (1.1) trusty; urgency=medium
 
   * add support for CORS
