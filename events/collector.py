@@ -17,10 +17,10 @@ from pyramid.httpexceptions import (
 from pyramid.response import Response
 
 from events import stats, queue
+from .const import MAXIMUM_EVENT_SIZE
 
 
 _MAXIMUM_CONTENT_LENGTH = 500 * 1024
-_MAXIMUM_EVENT_SIZE = 100 * 1024  # extra padding over spec for our wrapper
 _LOG = logging.getLogger(__name__)
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -215,7 +215,7 @@ class EventCollector(object):
         reserialized_items = []
         for item in batch:
             reserialized = wrap_and_serialize_event(request, item)
-            if len(reserialized) > _MAXIMUM_EVENT_SIZE:
+            if len(reserialized) > MAXIMUM_EVENT_SIZE:
                 self.stats_client.count("client-error.too-big")
                 error = make_error_event(request, "EVENT_TOO_BIG")
                 self.error_queue.put(error)

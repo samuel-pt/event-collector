@@ -2,6 +2,8 @@ import time
 
 import sysv_ipc
 
+from .const import MAXIMUM_EVENT_SIZE
+
 
 # how long to sleep when no items are in the message queue (seconds)
 BUSY_WAIT = 0.05
@@ -30,7 +32,7 @@ class SysVMessageQueue(object):
             key=key,
             flags=sysv_ipc.IPC_CREAT,
             mode=0600,
-            max_message_size=5120
+            max_message_size=MAXIMUM_EVENT_SIZE,
         )
 
     def put(self, event):
