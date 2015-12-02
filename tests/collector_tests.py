@@ -82,7 +82,7 @@ class CollectorUnitTests(unittest.TestCase):
     def test_max_length_enforced(self):
         request = testing.DummyRequest()
         request.environ["REMOTE_ADDR"] = "1.2.3.4"
-        request.content_length = 50 * 1024
+        request.content_length = 500 * 1024 + 1
         response = self.collector.process_request(request)
         self.assertEqual(response.status_code, 413)
         self.assertEqual(len(self.event_sink.events), 0)
@@ -177,10 +177,10 @@ class CollectorUnitTests(unittest.TestCase):
     def test_event_too_large(self):
         request = testing.DummyRequest()
         request.headers["User-Agent"] = "TestApp/1.0"
-        request.headers["X-Signature"] = "key=TestKey1, mac=0dc28323c1a98b912867fdc726c21d6220927ba07f09c787311f498a02c399eb"
+        request.headers["X-Signature"] = "key=TestKey1, mac=4b807bc6545bb393bc6fbe36db7c927da024b185cb8bd7a71131225ed19f8b16"
         request.headers["Date"] = "Thu, 17 Nov 2011 06:25:24 GMT"
         request.environ["REMOTE_ADDR"] = "1.2.3.4"
-        request.body = '[{"event1": "' + ("value" * 1100) + '"}]'
+        request.body = '[{"event1": "' + ("v" * 101 * 1024) + '"}]'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
         self.assertEquals(response.status_code, 413)

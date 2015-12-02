@@ -32,9 +32,9 @@ boto.kinesis.regions = patched_regions
 
 
 # maximum size of a single record in kinesis (bytes)
-_MAX_RECORD_LEN = 51200
+_MAX_RECORD_LEN = 1024 * 1024
 # maximum delay while trying to build a larger batch (seconds)
-_MAX_WAIT = 5
+_MAX_WAIT = 3
 # exponential backoff for when exceeding provisioned throughput (seconds)
 _BASE_RETRY = 2
 

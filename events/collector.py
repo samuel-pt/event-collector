@@ -19,8 +19,8 @@ from pyramid.response import Response
 from events import stats, queue
 
 
-_MAXIMUM_CONTENT_LENGTH = 40 * 1024
-_MAXIMUM_EVENT_SIZE = 5120  # extra padding over spec for our wrapper
+_MAXIMUM_CONTENT_LENGTH = 500 * 1024
+_MAXIMUM_EVENT_SIZE = 100 * 1024  # extra padding over spec for our wrapper
 _LOG = logging.getLogger(__name__)
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
