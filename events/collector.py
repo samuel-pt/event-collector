@@ -175,12 +175,6 @@ class EventCollector(object):
             self.error_queue.put(error)
             return HTTPRequestEntityTooLarge()
 
-        if not request.headers.get("Date"):
-            self.stats_client.count("client-error.no-date")
-            error = make_error_event(request, "NO_DATE")
-            self.error_queue.put(error)
-            return HTTPBadRequest("no date provided")
-
         if not request.headers.get("User-Agent"):
             self.stats_client.count("client-error.no-useragent")
             error = make_error_event(request, "NO_USERAGENT")

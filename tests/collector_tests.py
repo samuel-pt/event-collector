@@ -158,9 +158,9 @@ class CollectorUnitTests(unittest.TestCase):
         request.body = '[{"event1": "value"}, {"event2": "value"}]'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
-        self.assertEquals(response.status_code, 400)
-        self.assertEqual(len(self.event_sink.events), 0)
-        self.assertEqual(len(self.error_sink.events), 1)
+        self.assertEquals(response.status_code, 200)
+        self.assertEqual(len(self.event_sink.events), 2)
+        self.assertEqual(len(self.error_sink.events), 0)
 
     def test_useragent_not_provided(self):
         request = testing.DummyRequest()
