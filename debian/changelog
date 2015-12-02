@@ -1,3 +1,9 @@
+eventcollector (1.2.1) trusty; urgency=medium
+
+  * fix event queue not having increased max size
+
+ -- Neil Williams <neil@reddit.com>  Wed, 02 Dec 2015 11:44:45 -0800
+
 eventcollector (1.2) trusty; urgency=medium
 
   * increase maximum batch and event sizes
