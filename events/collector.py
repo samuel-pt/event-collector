@@ -1,7 +1,9 @@
 """HTTP Frontend for the event collector service."""
 
 import base64
+from cStringIO import StringIO
 import datetime
+import gzip
 import json
 import hashlib
 import hmac
@@ -21,7 +23,10 @@ from .const import MAXIMUM_EVENT_SIZE
 
 
 _MAXIMUM_CONTENT_LENGTH = 500 * 1024
+
+# The log level used here is defined in /etc/events.ini
 _LOG = logging.getLogger(__name__)
+
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Max-Age": "1728000",  # 20 days
@@ -191,7 +196,19 @@ class EventCollector(object):
 
         key = self.keystore.get(keyname, "INVALID")
         body = request.body
+
+        # Handle Gzipped Requests
+        if request.headers.get('Content-Encoding') == 'gzip':
+            f = StringIO(body)
+            try:
+                body = gzip.GzipFile(fileobj=f).read()
+            except IOError:
+                return HTTPBadRequest("invalid gzip content")
+
         expected_mac = hmac.new(key, body, hashlib.sha256).hexdigest()
+        _LOG.debug(
+            'Received request with key: %r, mac: %r, expected_mac: %r',
+            key, mac, expected_mac)
         if not constant_time_compare(expected_mac, mac or ""):
             self.stats_client.count("client-error.invalid-mac")
             error = make_error_event(request, "INVALID_MAC")
