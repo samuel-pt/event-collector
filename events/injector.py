@@ -6,6 +6,7 @@ import os
 import time
 import uuid
 
+import baseplate
 import boto
 import boto.kinesis
 import boto.kinesis.layer1
@@ -14,7 +15,6 @@ import paste.deploy.loadwsgi
 
 from boto.kinesis.exceptions import ProvisionedThroughputExceededException
 
-import events.stats
 import events.queue
 
 
@@ -95,10 +95,10 @@ class KinesisBatchConsumer(object):
     """An AWS Kinesis batch consumer for use with Batcher."""
     batch_size_limit = _MAX_RECORD_LEN
 
-    def __init__(self, kinesis, topic, stats_client):
+    def __init__(self, kinesis, topic, metrics_client):
         self.kinesis = kinesis
         self.topic = topic
-        self.stats_client = stats_client
+        self.metrics_client = metrics_client
 
     @staticmethod
     def get_item_size(item):
@@ -130,10 +130,12 @@ class KinesisBatchConsumer(object):
                 self.kinesis.put_record(self.topic, data, partition_key)
             except ProvisionedThroughputExceededException:
                 _LOG.warning("throughput exceeded, backing off")
-                self.stats_client.count("injector.throughput-exceeded")
+                self.metrics_client.counter(
+                    "injector.throughput-exceeded").increment()
                 time.sleep(_BASE_RETRY ** retry)
             else:
-                self.stats_client.count("collected.injector", count=len(items))
+                self.metrics_client.counter(
+                    "collected.injector").increment(len(items))
                 break
 
 
@@ -171,9 +173,9 @@ def main():
     region = config["aws.region"]
     kinesis = boto.kinesis.connect_to_region(region)
 
-    stats_client = events.stats.make_stats_client(config)
+    metrics_client = baseplate.make_metrics_client(config)
     kinesis_batch_consumer = KinesisBatchConsumer(
-        kinesis, topic_name, stats_client)
+        kinesis, topic_name, metrics_client)
     batcher = Batcher(kinesis_batch_consumer)
     consume_items_in_batches(messages, batcher)
 

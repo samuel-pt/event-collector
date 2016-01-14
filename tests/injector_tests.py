@@ -51,10 +51,10 @@ class BatcherTests(unittest.TestCase):
 
 class KinesisBatchConsumerTests(unittest.TestCase):
     def setUp(self):
-        self.mock_stats_client = mock.MagicMock()
+        self.mock_metrics_client = mock.MagicMock()
         self.mock_kinesis = mock.MagicMock()
         self.batch_consumer = injector.KinesisBatchConsumer(
-            self.mock_kinesis, "topic", self.mock_stats_client)
+            self.mock_kinesis, "topic", self.mock_metrics_client)
 
     def test_get_item_size(self):
         size = self.batch_consumer.get_item_size("test")

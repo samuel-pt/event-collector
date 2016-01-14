@@ -5,6 +5,7 @@ import unittest
 
 import mock
 
+import baseplate
 from pyramid import testing
 
 from events import collector
@@ -51,11 +52,12 @@ class CollectorUnitTests(unittest.TestCase):
         }
         self.event_sink = MockSink()
         self.error_sink = MockSink()
-        self.mock_stats_client = mock.MagicMock()
+        self.mock_metrics_client = mock.create_autospec(
+            baseplate.metrics.Client)
         self.allowed_origins = []
         self.collector = collector.EventCollector(
             keystore,
-            self.mock_stats_client,
+            self.mock_metrics_client,
             self.event_sink,
             self.error_sink,
             self.allowed_origins,

@@ -10,6 +10,7 @@ import hmac
 import logging
 import urlparse
 
+import baseplate
 from pyramid.config import Configurator
 from pyramid.httpexceptions import (
     HTTPBadRequest,
@@ -18,7 +19,7 @@ from pyramid.httpexceptions import (
 )
 from pyramid.response import Response
 
-from events import stats, queue
+from events import queue
 from .const import MAXIMUM_EVENT_SIZE
 
 
@@ -122,9 +123,9 @@ class EventCollector(object):
 
     """
 
-    def __init__(self, keystore, stats_client, event_queue, error_queue, allowed_origins):
+    def __init__(self, keystore, metrics_client, event_queue, error_queue, allowed_origins):
         self.keystore = keystore
-        self.stats_client = stats_client
+        self.metrics_client = metrics_client
         self.event_queue = event_queue
         self.error_queue = error_queue
         self.allowed_origins = allowed_origins
@@ -134,24 +135,28 @@ class EventCollector(object):
             origin = request.headers["Origin"]
             requested_method = request.headers["Access-Control-Request-Method"]
         except KeyError:
-            self.stats_client.count("cors.preflight.missing_headers")
+            self.metrics_client.counter(
+                "cors.preflight.missing_headers").increment()
             raise HTTPForbidden()
 
         headers_list = request.headers.get("Access-Control-Request-Headers", "")
         requested_headers = [h.strip().lower() for h in headers_list.split(",") if h]
         if requested_headers and requested_headers != ["x-signature"]:
-            self.stats_client.count("cors.preflight.bad_requested_headers")
+            self.metrics_client.counter(
+                "cors.preflight.bad_requested_headers").increment()
             raise HTTPForbidden()
 
         if requested_method != "POST":
-            self.stats_client.count("cors.preflight.bad_method")
+            self.metrics_client.counter(
+                "cors.preflight.bad_method").increment()
             raise HTTPForbidden()
 
         if not origin or not is_allowed_origin(origin, self.allowed_origins):
-            self.stats_client.count("cors.preflight.bad_origin")
+            self.metrics_client.counter(
+                "cors.preflight.bad_origin").increment()
             raise HTTPForbidden()
 
-        self.stats_client.count("cors.preflight.allowed")
+        self.metrics_client.counter("cors.preflight.allowed").increment()
         return Response(
             status="204 No Content",
             headers=_CORS_HEADERS,
@@ -175,13 +180,14 @@ class EventCollector(object):
         request.environ["events.start_time"] = datetime.datetime.utcnow()
 
         if request.content_length > _MAXIMUM_CONTENT_LENGTH:
-            self.stats_client.count("client-error.too-big")
+            self.metrics_client.counter("client-error.too-big").increment()
             error = make_error_event(request, "TOO_BIG")
             self.error_queue.put(error)
             return HTTPRequestEntityTooLarge()
 
         if not request.headers.get("User-Agent"):
-            self.stats_client.count("client-error.no-useragent")
+            self.metrics_client.counter(
+                "client-error.no-useragent").increment()
             error = make_error_event(request, "NO_USERAGENT")
             self.error_queue.put(error)
             return HTTPBadRequest("no user-agent provided")
@@ -210,7 +216,7 @@ class EventCollector(object):
             'Received request with key: %r, mac: %r, expected_mac: %r',
             key, mac, expected_mac)
         if not constant_time_compare(expected_mac, mac or ""):
-            self.stats_client.count("client-error.invalid-mac")
+            self.metrics_client.counter("client-error.invalid-mac").increment()
             error = make_error_event(request, "INVALID_MAC")
             self.error_queue.put(error)
             return HTTPForbidden()
@@ -218,13 +224,15 @@ class EventCollector(object):
         try:
             batch = json.loads(body)
         except ValueError:
-            self.stats_client.count("client-error.invalid-payload")
+            self.metrics_client.counter(
+                "client-error.invalid-payload").increment()
             error = make_error_event(request, "INVALID_PAYLOAD")
             self.error_queue.put(error)
             return HTTPBadRequest("invalid json")
 
         if not isinstance(batch, list):
-            self.stats_client.count("client-error.invalid-payload")
+            self.metrics_client.counter(
+                "client-error.invalid-payload").increment()
             error = make_error_event(request, "INVALID_PAYLOAD")
             self.error_queue.put(error)
             return HTTPBadRequest("json root object must be a list")
@@ -233,7 +241,7 @@ class EventCollector(object):
         for item in batch:
             reserialized = wrap_and_serialize_event(request, item)
             if len(reserialized) > MAXIMUM_EVENT_SIZE:
-                self.stats_client.count("client-error.too-big")
+                self.metrics_client.counter("client-error.too-big").increment()
                 error = make_error_event(request, "EVENT_TOO_BIG")
                 self.error_queue.put(error)
                 return HTTPRequestEntityTooLarge()
@@ -242,7 +250,8 @@ class EventCollector(object):
         for item in reserialized_items:
             self.event_queue.put(item)
 
-        self.stats_client.count("collected.http", count=len(reserialized_items))
+        self.metrics_client.counter("collected.http").increment(
+            len(reserialized_items))
 
         headers = {}
         origin = request.headers.get("Origin")
@@ -275,11 +284,11 @@ def make_app(global_config, **settings):
     allowed_origins = [
         x.strip() for x in settings["allowed_origins"].split(",") if x.strip()]
 
-    stats_client = stats.make_stats_client(settings)
+    metrics_client = baseplate.make_metrics_client(settings)
     event_queue = queue.make_queue("events", settings)
     error_queue = queue.make_queue("errors", settings)
     collector = EventCollector(
-        keystore, stats_client, event_queue, error_queue, allowed_origins)
+        keystore, metrics_client, event_queue, error_queue, allowed_origins)
     config.add_route("v1", "/v1", request_method="POST")
     config.add_route("v1_options", "/v1", request_method="OPTIONS")
     config.add_view(collector.process_request, route_name="v1")

@@ -10,6 +10,7 @@ setup(
         "pyramid",
         "sysv_ipc",
         "boto",
+        "baseplate",
     ],
     tests_require=[
         "mock",
