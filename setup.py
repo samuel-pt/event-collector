@@ -9,8 +9,8 @@ setup(
     install_requires=[
         "pyramid",
         "sysv_ipc",
-        "boto",
         "baseplate",
+        "kafka-python",
     ],
     tests_require=[
         "mock",
