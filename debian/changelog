@@ -1,3 +1,9 @@
+eventcollector (2.0.1) trusty; urgency=medium
+
+  * fix upstart job error queue name
+
+ -- Neil Williams <neil@reddit.com>  Wed, 27 Jan 2016 15:29:05 -0800
+
 eventcollector (2.0.0) trusty; urgency=medium
 
   * use kafka instead of kinesis
