@@ -8,7 +8,6 @@ setup(
     packages=find_packages(),
     install_requires=[
         "pyramid",
-        "sysv_ipc",
         "baseplate",
         "kafka-python",
     ],

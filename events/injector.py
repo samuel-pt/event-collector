@@ -7,12 +7,13 @@ import time
 
 import baseplate
 import paste.deploy.loadwsgi
+from baseplate.message_queue import MessageQueue
 
 from kafka import KafkaClient, SimpleProducer
 from kafka.common import KafkaError
 from kafka.protocol import CODEC_GZIP
 
-import events.queue
+from .const import MAXIMUM_QUEUE_LENGTH, MAXIMUM_EVENT_SIZE
 
 
 _LOG = logging.getLogger(__name__)
@@ -36,8 +37,8 @@ def main():
     logging.config.fileConfig(config["__file__"])
 
     queue_name = os.environ["QUEUE"]
-    queue = events.queue.make_queue(queue_name, config)
-    messages = queue.consume()
+    queue = MessageQueue("/" + queue_name,
+        max_messages=MAXIMUM_QUEUE_LENGTH, max_message_size=MAXIMUM_EVENT_SIZE)
 
     metrics_client = baseplate.make_metrics_client(config)
 
@@ -59,18 +60,18 @@ def main():
             time.sleep(_RETRY_DELAY)
             continue
 
-        for message in messages:
-            if message is not None:
-                for retry in itertools.count():
-                    try:
-                        kafka_producer.send_messages(topic_name, message)
-                    except KafkaError as exc:
-                        _LOG.warning("failed to send message: %s", exc)
-                        metrics_client.counter("injector.error").increment()
-                        time.sleep(_RETRY_DELAY)
-                    else:
-                        metrics_client.counter("collected.injector").increment()
-                        break
+        while True:
+            message = queue.get()
+            for retry in itertools.count():
+                try:
+                    kafka_producer.send_messages(topic_name, message)
+                except KafkaError as exc:
+                    _LOG.warning("failed to send message: %s", exc)
+                    metrics_client.counter("injector.error").increment()
+                    time.sleep(_RETRY_DELAY)
+                else:
+                    metrics_client.counter("collected.injector").increment()
+                    break
         kafka_producer.stop()
 
 

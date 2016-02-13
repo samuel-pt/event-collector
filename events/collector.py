@@ -11,6 +11,7 @@ import logging
 import urlparse
 
 import baseplate
+from baseplate.message_queue import MessageQueue
 from pyramid.config import Configurator
 from pyramid.httpexceptions import (
     HTTPBadRequest,
@@ -19,8 +20,7 @@ from pyramid.httpexceptions import (
 )
 from pyramid.response import Response
 
-from events import queue
-from .const import MAXIMUM_EVENT_SIZE
+from .const import MAXIMUM_QUEUE_LENGTH, MAXIMUM_EVENT_SIZE
 
 
 _MAXIMUM_CONTENT_LENGTH = 500 * 1024
@@ -285,8 +285,10 @@ def make_app(global_config, **settings):
         x.strip() for x in settings["allowed_origins"].split(",") if x.strip()]
 
     metrics_client = baseplate.make_metrics_client(settings)
-    event_queue = queue.make_queue("events", settings)
-    error_queue = queue.make_queue("errors", settings)
+    event_queue = MessageQueue("/events",
+        max_messages=MAXIMUM_QUEUE_LENGTH, max_message_size=MAXIMUM_EVENT_SIZE)
+    error_queue = MessageQueue("/errors",
+        max_messages=MAXIMUM_QUEUE_LENGTH, max_message_size=MAXIMUM_EVENT_SIZE)
     collector = EventCollector(
         keystore, metrics_client, event_queue, error_queue, allowed_origins)
     config.add_route("v1", "/v1", request_method="POST")

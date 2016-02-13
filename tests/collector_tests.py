@@ -35,7 +35,7 @@ class MockSink(object):
     def __init__(self):
         self.events = []
 
-    def put(self, event):
+    def put(self, event, timeout=None):
         self.events.append(event)
 
 

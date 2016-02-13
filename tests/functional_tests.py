@@ -1,14 +1,22 @@
 import datetime
 import unittest
 
-import sysv_ipc
+from baseplate.message_queue import MessageQueue, TimedOutError
 import webtest
 
-from events import collector, queue
+from events import collector
 
 
 class CollectorFunctionalTests(unittest.TestCase):
     def setUp(self):
+        # we create the queues before the actual code can so that we can
+        # override the max sizes to use these numbers which are safe to use
+        # without extra privileges on linux
+        self.events_queue = MessageQueue(name="/events",
+            max_messages=10, max_message_size=8192)
+        self.errors_queue = MessageQueue(name="/errors",
+            max_messages=10, max_message_size=8192)
+
         class MockDatetime(datetime.datetime):
             @classmethod
             def utcnow(cls):
@@ -24,12 +32,12 @@ class CollectorFunctionalTests(unittest.TestCase):
             "metrics.endpoint": "",
         })
         self.test_app = webtest.TestApp(app)
-        self.events_queue = queue.SysVMessageQueue(key=0xcafe)
-        self.errors_queue = queue.SysVMessageQueue(key=0xdecaf)
 
     def tearDown(self):
-        self.events_queue.queue.remove()
-        self.errors_queue.queue.remove()
+        self.events_queue.queue.unlink()
+        self.events_queue.queue.close()
+        self.errors_queue.queue.unlink()
+        self.errors_queue.queue.close()
 
     def test_batch(self):
         self.test_app.post("/v1",
@@ -45,13 +53,13 @@ class CollectorFunctionalTests(unittest.TestCase):
             },
         )
 
-        event1, ignored = self.events_queue.queue.receive(block=False)
+        event1 = self.events_queue.get(timeout=0)
         self.assertEqual(event1, '{"ip": "1.2.3.4", "event": {"event1": "value"}, "time": "2015-11-17T12:34:56"}')
-        event2, ignored = self.events_queue.queue.receive(block=False)
+        event2 = self.events_queue.get(timeout=0)
         self.assertEqual(event2, '{"ip": "1.2.3.4", "event": {"event2": "value"}, "time": "2015-11-17T12:34:56"}')
 
-        with self.assertRaises(sysv_ipc.BusyError):
-            self.errors_queue.queue.receive(block=False)
+        with self.assertRaises(TimedOutError):
+            self.errors_queue.get(timeout=0)
 
     def test_cors(self):
         response = self.test_app.options("/v1", headers={
