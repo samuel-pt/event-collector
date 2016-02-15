@@ -11,6 +11,7 @@ import logging
 import urlparse
 
 import baseplate
+from baseplate.crypto import constant_time_compare
 from baseplate.message_queue import MessageQueue
 from pyramid.config import Configurator
 from pyramid.httpexceptions import (
@@ -79,24 +80,6 @@ def parse_signature(header):
     pairs = [p.strip() for p in header.split(",") if p.strip()]
     params = dict(p.split("=") for p in pairs)
     return params.get("key"), params.get("mac")
-
-
-def constant_time_compare(actual, expected):
-    """Return if two strings are equal, taking as much time either way.
-
-    The time taken is dependent on the number of characters provided instead
-    of the number of characters that match.
-
-    hmac.compare_digest obsoletes this when Python 2.7.7+ is available.
-
-    """
-    actual_len = len(actual)
-    expected_len = len(expected)
-    result = actual_len ^ expected_len
-    if expected_len > 0:
-        for i in xrange(actual_len):
-            result |= ord(actual[i]) ^ ord(expected[i % expected_len])
-    return result == 0
 
 
 def wrap_and_serialize_event(request, event):
