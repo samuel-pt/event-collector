@@ -12,7 +12,7 @@ import urlparse
 
 import baseplate
 from baseplate.crypto import constant_time_compare
-from baseplate.message_queue import MessageQueue
+from baseplate.message_queue import MessageQueue, MessageQueueError
 from pyramid.config import Configurator
 from pyramid.httpexceptions import (
     HTTPBadRequest,
@@ -91,11 +91,6 @@ def wrap_and_serialize_event(request, event):
     })
 
 
-def make_error_event(request, code):
-    """Create a serialized event representing a request error."""
-    return wrap_and_serialize_event(request, {"error": code})
-
-
 class EventCollector(object):
     """The event collector.
 
@@ -145,6 +140,16 @@ class EventCollector(object):
             headers=_CORS_HEADERS,
         )
 
+    def _publish_error(self, request, code):
+        self.metrics_client.counter("client-error.%s" % code).increment()
+
+        error = wrap_and_serialize_event(request, {"error": code})
+
+        try:
+            self.error_queue.put(error, timeout=0)
+        except MessageQueueError as exc:
+            _LOG.warning("failed to publish error: %r", exc)
+
     def process_request(self, request):
         """Consume an event batch request and return an appropriate response.
 
@@ -163,16 +168,11 @@ class EventCollector(object):
         request.environ["events.start_time"] = datetime.datetime.utcnow()
 
         if request.content_length > _MAXIMUM_CONTENT_LENGTH:
-            self.metrics_client.counter("client-error.too-big").increment()
-            error = make_error_event(request, "TOO_BIG")
-            self.error_queue.put(error)
+            self._publish_error(request, "TOO_BIG")
             return HTTPRequestEntityTooLarge()
 
         if not request.headers.get("User-Agent"):
-            self.metrics_client.counter(
-                "client-error.no-useragent").increment()
-            error = make_error_event(request, "NO_USERAGENT")
-            self.error_queue.put(error)
+            self._publish_error(request, "NO_USERAGENT")
             return HTTPBadRequest("no user-agent provided")
 
         try:
@@ -199,34 +199,24 @@ class EventCollector(object):
             'Received request with key: %r, mac: %r, expected_mac: %r',
             key, mac, expected_mac)
         if not constant_time_compare(expected_mac, mac or ""):
-            self.metrics_client.counter("client-error.invalid-mac").increment()
-            error = make_error_event(request, "INVALID_MAC")
-            self.error_queue.put(error)
+            self._publish_error(request, "INVALID_MAC")
             return HTTPForbidden()
 
         try:
             batch = json.loads(body)
         except ValueError:
-            self.metrics_client.counter(
-                "client-error.invalid-payload").increment()
-            error = make_error_event(request, "INVALID_PAYLOAD")
-            self.error_queue.put(error)
+            self._publish_error(request, "INVALID_PAYLOAD")
             return HTTPBadRequest("invalid json")
 
         if not isinstance(batch, list):
-            self.metrics_client.counter(
-                "client-error.invalid-payload").increment()
-            error = make_error_event(request, "INVALID_PAYLOAD")
-            self.error_queue.put(error)
+            self._publish_error(request, "INVALID_PAYLOAD")
             return HTTPBadRequest("json root object must be a list")
 
         reserialized_items = []
         for item in batch:
             reserialized = wrap_and_serialize_event(request, item)
             if len(reserialized) > MAXIMUM_EVENT_SIZE:
-                self.metrics_client.counter("client-error.too-big").increment()
-                error = make_error_event(request, "EVENT_TOO_BIG")
-                self.error_queue.put(error)
+                self._publish_error(request, "EVENT_TOO_BIG")
                 return HTTPRequestEntityTooLarge()
             reserialized_items.append(reserialized)
 
