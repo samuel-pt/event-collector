@@ -1,3 +1,11 @@
+eventcollector (2.1.0) trusty; urgency=medium
+
+  * Use POSIX message queues instead of SysV.
+  * More baseplate commonization.
+  * Clean up error event publishing.
+
+ -- Neil Williams <neil@reddit.com>  Wed, 17 Feb 2016 09:14:08 -0800
+
 eventcollector (2.0.1) trusty; urgency=medium
 
   * fix upstart job error queue name
