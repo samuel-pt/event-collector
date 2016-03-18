@@ -85,7 +85,7 @@ def parse_signature(header):
 def wrap_and_serialize_event(request, event):
     """Wrap the client-sent event with some additional fields and serialize."""
     return json.dumps({
-        "ip": request.environ["REMOTE_ADDR"],
+        "ip": request.client_addr,
         "time": request.environ["events.start_time"].isoformat(),
         "event": event,
     })
