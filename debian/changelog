@@ -1,3 +1,9 @@
+eventcollector (2.2.0) trusty; urgency=medium
+
+  * Respect X-Forwarded-For when getting client IP
+
+ -- Neil Williams <neil@reddit.com>  Tue, 29 Mar 2016 16:08:09 -0700
+
 eventcollector (2.1.0) trusty; urgency=medium
 
   * Use POSIX message queues instead of SysV.
