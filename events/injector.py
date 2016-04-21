@@ -9,16 +9,34 @@ import baseplate
 import paste.deploy.loadwsgi
 from baseplate.message_queue import MessageQueue
 
-from kafka import KafkaClient, SimpleProducer
-from kafka.common import KafkaError
-from kafka.protocol import CODEC_GZIP
+from kafka import KafkaProducer
+from kafka.common import KafkaError, KafkaTimeoutError
 
 from .const import MAXIMUM_QUEUE_LENGTH, MAXIMUM_MESSAGE_SIZE
 
 
 _LOG = logging.getLogger(__name__)
-_RETRY_DELAY = 1
+_RETRY_DELAY_SECS = 1
 
+
+def process_queue(queue, topic_name, kafka_producer, success_cb, err_cb,
+                  metrics_client=None):
+    """ Take messages off a queue and send to Kafka topic."""
+    while True:
+        message = queue.get()
+        while True:
+            try:
+                kafka_producer.send(topic_name, message) \
+                              .add_callback(success_cb) \
+                              .add_errback(err_cb(message, queue))
+            except KafkaTimeoutError:
+                # In the event of a kafka error in send attempt,
+                #   retry sending after a delay
+                if metrics_client:
+                    metrics_client.counter("injector.pre_send_error").increment()
+                time.sleep(_RETRY_DELAY_SECS)
+            else:
+                break
 
 def main():
     """Run a consumer.
@@ -47,36 +65,44 @@ def main():
 
     topic_name = config["topic." + queue_name]
 
+    # Details at http://kafka-python.readthedocs.org/en/1.0.2/apidoc/KafkaProducer.html
     producer_options = {
-        "codec": CODEC_GZIP,
-        "batch_send_every_n": 20,
-        "batch_send_every_t": 0.01,  # 10 milliseconds
+        "compression_type": 'gzip',
+        "batch_size": 20,
+        "linger_ms": 10,
+        "retries": int(config["kafka_retries"]),
+        "retry_backoff_ms": _RETRY_DELAY_SECS * 1000
     }
+
+    def producer_error_cb(msg, queue):
+        def requeue_msg(exc):
+            _LOG.warning("failed to send message=%s due to error=%s", msg, exc)
+            metrics_client.counter("injector.error").increment()
+            queue.put(msg)
+        return requeue_msg
+
+    def producer_success_cb(success_val):
+        metrics_client.counter("collected.injector").increment()
 
     while True:
         try:
-            kafka_client = KafkaClient(config["kafka_brokers"])
-            kafka_producer = SimpleProducer(kafka_client, **producer_options)
+            kafka_brokers = [broker.strip() for broker in config['kafka_brokers'].split(',')]
+            kafka_producer = KafkaProducer(bootstrap_servers=kafka_brokers,
+                                           **producer_options)
         except KafkaError as exc:
             _LOG.warning("could not connect: %s", exc)
             metrics_client.counter("injector.connection_error").increment()
-            time.sleep(_RETRY_DELAY)
+            time.sleep(_RETRY_DELAY_SECS)
             continue
 
-        while True:
-            message = queue.get()
-            for retry in itertools.count():
-                try:
-                    kafka_producer.send_messages(topic_name, message)
-                except KafkaError as exc:
-                    _LOG.warning("failed to send message: %s", exc)
-                    metrics_client.counter("injector.error").increment()
-                    time.sleep(_RETRY_DELAY)
-                else:
-                    metrics_client.counter("collected.injector").increment()
-                    break
-        kafka_producer.stop()
+        process_queue(queue,
+                      topic_name,
+                      kafka_producer,
+                      producer_success_cb,
+                      producer_error_cb,
+                      metrics_client=metrics_client)
 
+        kafka_producer.stop()
 
 if __name__ == "__main__":
     main()
