@@ -11,9 +11,6 @@ setup(
         "baseplate",
         "kafka-python",
     ],
-    tests_require=[
-        "mock",
-    ],
     entry_points={
         "paste.app_factory": [
             "main = events.collector:make_app",

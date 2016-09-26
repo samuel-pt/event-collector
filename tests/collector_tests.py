@@ -3,8 +3,6 @@ import datetime
 import gzip
 import unittest
 
-import mock
-
 import baseplate
 from pyramid import testing
 
@@ -39,6 +37,20 @@ class MockSink(object):
         self.events.append(event)
 
 
+class MockTransport(baseplate.metrics.Transport):
+    def __init__(self):
+        self.metrics = []
+
+    def send(self, metric):
+        self.metrics.append(metric)
+
+    def assert_counter_with_value(self, key, value):
+        expected = "{}:{:g}|c".format(key, value)
+        assert any(metric.startswith(expected) for metric in self.metrics), \
+            "no metric named `{}` with value `{}` found in {!r}".format(
+            key, value, self.metrics)
+
+
 class CollectorUnitTests(unittest.TestCase):
     def setUp(self):
         class MockDatetime(datetime.datetime):
@@ -52,12 +64,14 @@ class CollectorUnitTests(unittest.TestCase):
         }
         self.event_sink = MockSink()
         self.error_sink = MockSink()
-        self.mock_metrics_client = mock.create_autospec(
-            baseplate.metrics.Client)
+
+        self.metrics = MockTransport()
+        metrics_client = baseplate.metrics.Client(self.metrics, "collector")
+
         self.allowed_origins = []
         self.collector = collector.EventCollector(
             keystore,
-            self.mock_metrics_client,
+            metrics_client,
             self.event_sink,
             self.error_sink,
             self.allowed_origins,
@@ -83,6 +97,8 @@ class CollectorUnitTests(unittest.TestCase):
             self.event_sink.events)
         self.assertEqual(self.error_sink.events, [])
         self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), None)
+        self.metrics.assert_counter_with_value(
+            "collector.collected.http.TestKey1", 2)
 
     def test_gzip_batch(self):
         request = testing.DummyRequest()
@@ -116,6 +132,7 @@ class CollectorUnitTests(unittest.TestCase):
 
     def test_max_length_enforced(self):
         request = testing.DummyRequest()
+        request.headers["X-Signature"] = "key=TestKey1, mac=f8d929da113ab741eb173359f2bf28074f0ede5a2565a86389c35dd2c7ff7f6c"
         request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.client_addr = "2.3.4.5"
         request.content_length = 500 * 1024 + 1
@@ -123,6 +140,8 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 413)
         self.assertEqual(len(self.event_sink.events), 0)
         self.assertEqual(len(self.error_sink.events), 1)
+        self.metrics.assert_counter_with_value(
+            "collector.client-error.TestKey1.TOO_BIG", 1)
 
     def test_invalid_json(self):
         request = testing.DummyRequest()
@@ -137,6 +156,8 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEquals(response.status_code, 400)
         self.assertEqual(len(self.event_sink.events), 0)
         self.assertEqual(len(self.error_sink.events), 1)
+        self.metrics.assert_counter_with_value(
+            "collector.client-error.TestKey1.INVALID_PAYLOAD", 1)
 
     def test_not_a_batch(self):
         request = testing.DummyRequest()
@@ -151,6 +172,8 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(len(self.event_sink.events), 0)
         self.assertEqual(len(self.error_sink.events), 1)
+        self.metrics.assert_counter_with_value(
+            "collector.client-error.TestKey1.INVALID_PAYLOAD", 1)
 
     def test_no_auth(self):
         request = testing.DummyRequest()
@@ -164,6 +187,8 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(len(self.event_sink.events), 0)
         self.assertEqual(len(self.error_sink.events), 1)
+        self.metrics.assert_counter_with_value(
+            "collector.client-error.UNKNOWN.INVALID_MAC", 1)
 
     def test_unknown_key(self):
         request = testing.DummyRequest()
@@ -176,6 +201,8 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(len(self.event_sink.events), 0)
         self.assertEqual(len(self.error_sink.events), 1)
+        self.metrics.assert_counter_with_value(
+            "collector.client-error.UNKNOWN.INVALID_MAC", 1)
 
     def test_invalid_mac(self):
         request = testing.DummyRequest()
@@ -190,6 +217,8 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEquals(response.status_code, 403)
         self.assertEqual(len(self.event_sink.events), 0)
         self.assertEqual(len(self.error_sink.events), 1)
+        self.metrics.assert_counter_with_value(
+            "collector.client-error.TestKey1.INVALID_MAC", 1)
 
     def test_date_not_provided(self):
         request = testing.DummyRequest()
@@ -230,6 +259,8 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEquals(response.status_code, 413)
         self.assertEqual(len(self.event_sink.events), 0)
         self.assertEqual(len(self.error_sink.events), 1)
+        self.metrics.assert_counter_with_value(
+            "collector.client-error.TestKey1.EVENT_TOO_BIG", 1)
 
     def test_key_in_urlparams(self):
         request = testing.DummyRequest()
