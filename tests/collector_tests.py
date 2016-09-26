@@ -37,7 +37,7 @@ class MockSink(object):
         self.events.append(event)
 
 
-class MockTransport(baseplate.metrics.Transport):
+class MockMetricsTransport(baseplate.metrics.Transport):
     def __init__(self):
         self.metrics = []
 
@@ -65,7 +65,7 @@ class CollectorUnitTests(unittest.TestCase):
         self.event_sink = MockSink()
         self.error_sink = MockSink()
 
-        self.metrics = MockTransport()
+        self.metrics = MockMetricsTransport()
         metrics_client = baseplate.metrics.Client(self.metrics, "collector")
 
         self.allowed_origins = []
