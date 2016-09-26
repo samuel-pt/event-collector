@@ -140,8 +140,9 @@ class EventCollector(object):
             headers=_CORS_HEADERS,
         )
 
-    def _publish_error(self, request, code):
-        self.metrics_client.counter("client-error.%s" % code).increment()
+    def _publish_error(self, request, keyname, code):
+        metric_name = "client-error.{}.{}".format(keyname, code)
+        self.metrics_client.counter(metric_name).increment()
 
         error = wrap_and_serialize_event(request, {"error": code})
 
@@ -167,14 +168,6 @@ class EventCollector(object):
 
         request.environ["events.start_time"] = datetime.datetime.utcnow()
 
-        if request.content_length > _MAXIMUM_CONTENT_LENGTH:
-            self._publish_error(request, "TOO_BIG")
-            return HTTPRequestEntityTooLarge()
-
-        if not request.headers.get("User-Agent"):
-            self._publish_error(request, "NO_USERAGENT")
-            return HTTPBadRequest("no user-agent provided")
-
         try:
             signature_header = request.headers["X-Signature"]
         except KeyError:
@@ -183,8 +176,20 @@ class EventCollector(object):
         else:
             keyname, mac = parse_signature(signature_header)
 
-        key = self.keystore.get(keyname, "INVALID")
+        try:
+            key = self.keystore[keyname]
+        except KeyError:
+            keyname = "UNKNOWN"
+            key = "INVALID"
+
+        if request.content_length > _MAXIMUM_CONTENT_LENGTH:
+            self._publish_error(request, keyname, "TOO_BIG")
+            return HTTPRequestEntityTooLarge()
         body = request.body
+
+        if not request.headers.get("User-Agent"):
+            self._publish_error(request, keyname, "NO_USERAGENT")
+            return HTTPBadRequest("no user-agent provided")
 
         # Handle Gzipped Requests
         if request.headers.get('Content-Encoding') == 'gzip':
@@ -199,31 +204,31 @@ class EventCollector(object):
             'Received request with key: %r, mac: %r, expected_mac: %r',
             key, mac, expected_mac)
         if not constant_time_compare(expected_mac, mac or ""):
-            self._publish_error(request, "INVALID_MAC")
+            self._publish_error(request, keyname, "INVALID_MAC")
             return HTTPForbidden()
 
         try:
             batch = json.loads(body)
         except ValueError:
-            self._publish_error(request, "INVALID_PAYLOAD")
+            self._publish_error(request, keyname, "INVALID_PAYLOAD")
             return HTTPBadRequest("invalid json")
 
         if not isinstance(batch, list):
-            self._publish_error(request, "INVALID_PAYLOAD")
+            self._publish_error(request, keyname, "INVALID_PAYLOAD")
             return HTTPBadRequest("json root object must be a list")
 
         reserialized_items = []
         for item in batch:
             reserialized = wrap_and_serialize_event(request, item)
             if len(reserialized) > MAXIMUM_EVENT_SIZE:
-                self._publish_error(request, "EVENT_TOO_BIG")
+                self._publish_error(request, keyname, "EVENT_TOO_BIG")
                 return HTTPRequestEntityTooLarge()
             reserialized_items.append(reserialized)
 
         for item in reserialized_items:
             self.event_queue.put(item)
 
-        self.metrics_client.counter("collected.http").increment(
+        self.metrics_client.counter("collected.http." + keyname).increment(
             len(reserialized_items))
 
         headers = {}

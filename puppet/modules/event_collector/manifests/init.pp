@@ -11,7 +11,6 @@ class event_collector {
     'python-coverage',
     'python-gevent',
     'python-kafka',
-    'python-mock',
     'python-nose',
     'python-pyramid',
     'python-setuptools',
