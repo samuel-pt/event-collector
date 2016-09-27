@@ -1,3 +1,10 @@
+eventcollector (2.3.0) trusty; urgency=medium
+
+  * Categorize collector metrics by client key.
+  * Add event batch payload to error topic for diagnostics.
+
+ -- Neil Williams <neil@reddit.com>  Tue, 27 Sep 2016 14:59:22 -0700
+
 eventcollector (2.2.0) trusty; urgency=medium
 
   * Respect X-Forwarded-For when getting client IP
