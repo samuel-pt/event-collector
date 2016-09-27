@@ -21,10 +21,13 @@ from pyramid.httpexceptions import (
 )
 from pyramid.response import Response
 
-from .const import MAXIMUM_QUEUE_LENGTH, MAXIMUM_EVENT_SIZE
+from .const import (
+    MAXIMUM_BATCH_SIZE,
+    MAXIMUM_EVENT_SIZE,
+    MAXIMUM_MESSAGE_SIZE,
+    MAXIMUM_QUEUE_LENGTH,
+)
 
-
-_MAXIMUM_CONTENT_LENGTH = 500 * 1024
 
 # The log level used here is defined in /etc/events.ini
 _LOG = logging.getLogger(__name__)
@@ -144,7 +147,13 @@ class EventCollector(object):
         metric_name = "client-error.{}.{}".format(keyname, code)
         self.metrics_client.counter(metric_name).increment()
 
-        error = wrap_and_serialize_event(request, {"error": code})
+        # the -100 allows some room for the wrapper
+        truncated_body = request.body[:MAXIMUM_BATCH_SIZE-100]
+        error = wrap_and_serialize_event(request, {
+            "key": keyname,
+            "error": code,
+            "raw_batch": truncated_body,
+        })
 
         try:
             self.error_queue.put(error, timeout=0)
@@ -182,7 +191,7 @@ class EventCollector(object):
             keyname = "UNKNOWN"
             key = "INVALID"
 
-        if request.content_length > _MAXIMUM_CONTENT_LENGTH:
+        if request.content_length > MAXIMUM_BATCH_SIZE:
             self._publish_error(request, keyname, "TOO_BIG")
             return HTTPRequestEntityTooLarge()
         body = request.body
@@ -263,10 +272,16 @@ def make_app(global_config, **settings):
         x.strip() for x in settings["allowed_origins"].split(",") if x.strip()]
 
     metrics_client = baseplate.make_metrics_client(settings)
-    event_queue = MessageQueue("/events",
-        max_messages=MAXIMUM_QUEUE_LENGTH, max_message_size=MAXIMUM_EVENT_SIZE)
-    error_queue = MessageQueue("/errors",
-        max_messages=MAXIMUM_QUEUE_LENGTH, max_message_size=MAXIMUM_EVENT_SIZE)
+    event_queue = MessageQueue(
+        "/events",
+        max_messages=MAXIMUM_QUEUE_LENGTH["events"],
+        max_message_size=MAXIMUM_MESSAGE_SIZE["events"],
+    )
+    error_queue = MessageQueue(
+        "/errors",
+        max_messages=MAXIMUM_QUEUE_LENGTH["errors"],
+        max_message_size=MAXIMUM_MESSAGE_SIZE["errors"],
+    )
     collector = EventCollector(
         keystore, metrics_client, event_queue, error_queue, allowed_origins)
     config.add_route("v1", "/v1", request_method="POST")

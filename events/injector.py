@@ -13,7 +13,7 @@ from kafka import KafkaClient, SimpleProducer
 from kafka.common import KafkaError
 from kafka.protocol import CODEC_GZIP
 
-from .const import MAXIMUM_QUEUE_LENGTH, MAXIMUM_EVENT_SIZE
+from .const import MAXIMUM_QUEUE_LENGTH, MAXIMUM_MESSAGE_SIZE
 
 
 _LOG = logging.getLogger(__name__)
@@ -37,8 +37,11 @@ def main():
     logging.config.fileConfig(config["__file__"])
 
     queue_name = os.environ["QUEUE"]
-    queue = MessageQueue("/" + queue_name,
-        max_messages=MAXIMUM_QUEUE_LENGTH, max_message_size=MAXIMUM_EVENT_SIZE)
+    queue = MessageQueue(
+        "/" + queue_name,
+        max_messages=MAXIMUM_QUEUE_LENGTH[queue_name],
+        max_message_size=MAXIMUM_MESSAGE_SIZE[queue_name],
+    )
 
     metrics_client = baseplate.make_metrics_client(config)
 
