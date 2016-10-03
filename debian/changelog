@@ -1,3 +1,9 @@
+eventcollector (2.4.0) trusty; urgency=medium
+
+  * Enable async kafka producer for event injector
+
+ -- Courtney Wang <courtney.wang@reddit.com>  Mon, 3 Oct 2016 15:30:10 -0700
+
 eventcollector (2.3.0) trusty; urgency=medium
 
   * Categorize collector metrics by client key.
