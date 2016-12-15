@@ -159,6 +159,22 @@ class CollectorUnitTests(unittest.TestCase):
         self.metrics.assert_counter_with_value(
             "collector.client-error.TestKey1.INVALID_PAYLOAD", 1)
 
+    def test_bad_utf8(self):
+        request = testing.DummyRequest()
+        request.headers["User-Agent"] = "TestApp/1.0"
+        request.headers["X-Signature"] = "key=TestKey1, mac=7010e4f03d53cc16f76f4818bf3de8ec50e589d38622ec06024eb0c33e92ddff"
+        request.headers["Date"] = "Wed, 25 Nov 2015 06:25:24 GMT"
+        request.environ["REMOTE_ADDR"] = "1.2.3.4"
+        request.client_addr = "2.3.4.5"
+        request.body = '{"blah": "\x8b"}'
+        request.content_length = len(request.body)
+        response = self.collector.process_request(request)
+        self.assertEquals(response.status_code, 400)
+        self.assertEqual(len(self.event_sink.events), 0)
+        self.assertEqual(len(self.error_sink.events), 1)
+        self.metrics.assert_counter_with_value(
+            "collector.client-error.TestKey1.INVALID_PAYLOAD", 1)
+
     def test_not_a_batch(self):
         request = testing.DummyRequest()
         request.headers["User-Agent"] = "TestApp/1.0"

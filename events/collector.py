@@ -148,7 +148,8 @@ class EventCollector(object):
         self.metrics_client.counter(metric_name).increment()
 
         # the -100 allows some room for the wrapper
-        truncated_body = request.body[:MAXIMUM_BATCH_SIZE-100]
+        unicode_body = request.body.decode("utf8", "replace")
+        truncated_body = unicode_body[:MAXIMUM_BATCH_SIZE-100]
         error = wrap_and_serialize_event(request, {
             "key": keyname,
             "error": code,
