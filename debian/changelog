@@ -1,3 +1,9 @@
+eventcollector (2.4.1) trusty; urgency=medium
+
+  * Fix crash when serializing bad payloads to error topic
+
+ -- Neil Williams <neil@reddit.com>  Mon, 19 Dec 2016 13:11:16 -0800
+
 eventcollector (2.4.0) trusty; urgency=medium
 
   * Enable async kafka producer for event injector
