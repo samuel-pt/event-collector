@@ -71,7 +71,8 @@ def main():
         "batch_size": 20,
         "linger_ms": 10,
         "retries": int(config["kafka_retries"]),
-        "retry_backoff_ms": _RETRY_DELAY_SECS * 1000
+        "retry_backoff_ms": _RETRY_DELAY_SECS * 1000,
+        "api_version": "0.8.2"
     }
 
     def producer_error_cb(msg, queue):
