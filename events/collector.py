@@ -229,11 +229,10 @@ class EventCollector(object):
 
         reserialized_items = []
         for item in batch:
-            reserialized = wrap_and_serialize_event(request, item)
-            if len(reserialized) > MAXIMUM_EVENT_SIZE:
+            if len(item) > MAXIMUM_EVENT_SIZE:
                 self._publish_error(request, keyname, "EVENT_TOO_BIG")
                 return HTTPRequestEntityTooLarge()
-            reserialized_items.append(reserialized)
+            reserialized_items.append(item)
 
         for item in reserialized_items:
             self.event_queue.put(item)
