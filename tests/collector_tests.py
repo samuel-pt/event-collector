@@ -91,8 +91,8 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             [
-                '{"ip": "2.3.4.5", "event": {"event1": "value"}, "time": "2015-11-17T12:34:56"}',
-                '{"ip": "2.3.4.5", "event": {"event2": "value"}, "time": "2015-11-17T12:34:56"}',
+                '{"event1": "value"}',
+                '{"event2": "value"}',
             ],
             self.event_sink.events)
         self.assertEqual(self.error_sink.events, [])
@@ -123,8 +123,8 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             [
-                '{"ip": "2.3.4.5", "event": {"event1": "value"}, "time": "2015-11-17T12:34:56"}',
-                '{"ip": "2.3.4.5", "event": {"event2": "value"}, "time": "2015-11-17T12:34:56"}',
+                '{"event1": "value"}',
+                '{"event2": "value"}',
             ],
             self.event_sink.events)
         self.assertEqual(self.error_sink.events, [])
@@ -269,14 +269,14 @@ class CollectorUnitTests(unittest.TestCase):
         request.headers["Date"] = "Thu, 17 Nov 2011 06:25:24 GMT"
         request.environ["REMOTE_ADDR"] = "1.2.3.4"
         request.client_addr = "2.3.4.5"
-        request.body = '[{"event1": "' + ("v" * 101 * 1024) + '"}]'
+        request.body = '[{"event1": "' + ("v" * 1000 * 1024) + '"}]'
         request.content_length = len(request.body)
         response = self.collector.process_request(request)
         self.assertEquals(response.status_code, 413)
         self.assertEqual(len(self.event_sink.events), 0)
         self.assertEqual(len(self.error_sink.events), 1)
         self.metrics.assert_counter_with_value(
-            "collector.client-error.TestKey1.EVENT_TOO_BIG", 1)
+            "collector.client-error.TestKey1.TOO_BIG", 1)
 
     def test_key_in_urlparams(self):
         request = testing.DummyRequest()
@@ -293,8 +293,8 @@ class CollectorUnitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             [
-                '{"ip": "2.3.4.5", "event": {"event1": "value"}, "time": "2015-11-17T12:34:56"}',
-                '{"ip": "2.3.4.5", "event": {"event2": "value"}, "time": "2015-11-17T12:34:56"}',
+                '{"event1": "value"}',
+                '{"event2": "value"}',
             ],
             self.event_sink.events)
         self.assertEqual(self.error_sink.events, [])

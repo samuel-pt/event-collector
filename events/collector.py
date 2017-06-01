@@ -235,7 +235,7 @@ class EventCollector(object):
             reserialized_items.append(item)
 
         for item in reserialized_items:
-            self.event_queue.put(item)
+            self.event_queue.put(json.dumps(item))
 
         self.metrics_client.counter("collected.http." + keyname).increment(
             len(reserialized_items))

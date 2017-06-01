@@ -54,9 +54,9 @@ class CollectorFunctionalTests(unittest.TestCase):
         )
 
         event1 = self.events_queue.get(timeout=0)
-        self.assertEqual(event1, '{"ip": "1.2.3.4", "event": {"event1": "value"}, "time": "2015-11-17T12:34:56"}')
+        self.assertEqual(event1, '{"event1": "value"}')
         event2 = self.events_queue.get(timeout=0)
-        self.assertEqual(event2, '{"ip": "1.2.3.4", "event": {"event2": "value"}, "time": "2015-11-17T12:34:56"}')
+        self.assertEqual(event2, '{"event2": "value"}')
 
         with self.assertRaises(TimedOutError):
             self.errors_queue.get(timeout=0)
