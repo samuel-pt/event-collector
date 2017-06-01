@@ -73,7 +73,7 @@ def main():
             ps = pubsub.Client()
             ps_topic = ps.topic(topic_name)
         except NotFound as exc:
-            _LOG.warning("could not connect: %s", exc)
+            _LOG.warning("Topic %s not found. Please create it", topic_name)
             metrics_client.counter("google_injector.connection_error").increment()
             time.sleep(_RETRY_DELAY_SECS)
             continue
