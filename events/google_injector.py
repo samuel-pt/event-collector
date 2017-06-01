@@ -29,12 +29,12 @@ def process_queue(queue, ps_topic,
             try:
                 ps_topic.publish(message)
                 if metrics_client:
-                    metrics_client.counter("collected.injector").increment()
+                    metrics_client.counter("collected.google_injector").increment()
             except GaxError:
                 # In the event of a Google PubSub error in send attempt,
                 #   retry sending after a delay
                 if metrics_client:
-                    metrics_client.counter("injector.pre_send_error").increment()
+                    metrics_client.counter("google_injector.pre_send_error").increment()
                 time.sleep(_RETRY_DELAY_SECS)
             else:
                 break
@@ -74,7 +74,7 @@ def main():
             ps_topic = ps.topic(topic_name)
         except NotFound as exc:
             _LOG.warning("could not connect: %s", exc)
-            metrics_client.counter("injector.connection_error").increment()
+            metrics_client.counter("google_injector.connection_error").increment()
             time.sleep(_RETRY_DELAY_SECS)
             continue
 
