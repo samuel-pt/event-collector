@@ -10,7 +10,7 @@ setup(
         "pyramid",
         "baseplate",
         "kafka-python",
-        "google-cloud-pubsub",
+        "google-cloud",
     ],
     entry_points={
         "paste.app_factory": [

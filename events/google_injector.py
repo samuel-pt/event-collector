@@ -11,6 +11,7 @@ from baseplate.message_queue import MessageQueue
 
 from google.cloud import pubsub
 from google.cloud.exceptions import NotFound
+from google.cloud.exceptions import GoogleCloudError
 from google.gax.errors import GaxError
 
 from .const import MAXIMUM_QUEUE_LENGTH, MAXIMUM_MESSAGE_SIZE
@@ -30,7 +31,8 @@ def process_queue(queue, ps_topic,
                 ps_topic.publish(message)
                 if metrics_client:
                     metrics_client.counter("collected.google_injector").increment()
-            except GaxError:
+            except (GaxError, GoogleCloudError) as exc:
+                _LOG.warning("failed to send message=%s due to error=%s", message, exc)
                 # In the event of a Google PubSub error in send attempt,
                 #   retry sending after a delay
                 if metrics_client:
