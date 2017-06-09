@@ -21,14 +21,14 @@ _LOG = logging.getLogger(__name__)
 _RETRY_DELAY_SECS = 1
 
 
-def process_queue(queue, ps_topic,
+def process_queue(queue, ps_batch,
                   metrics_client=None):
     """ Take messages off a queue and send to Google PubSub topic."""
     while True:
         message = queue.get()
         while True:
             try:
-                ps_topic.publish(message)
+                ps_batch.publish(message)
                 if metrics_client:
                     metrics_client.counter("collected.google_injector").increment()
             except (GaxError, GoogleCloudError) as exc:
@@ -69,11 +69,21 @@ def main():
     Assumption: Config will have topic_name for the respective queue_name
     """
     topic_name = config["topic." + queue_name]
+    """
+    PubSub batch.size read from configuraton
+    If not present, 100 is used as default batch size
+    """
+    batch_size = config.setdefault("batch.size", 100)
 
     while True:
         try:
             ps = pubsub.Client()
             ps_topic = ps.topic(topic_name)
+            """
+            Google PubSub api will automatically publish the messages in batch
+            if no.of messages present in batch equals batch_size
+            """
+            ps_batch = ps_topic.batch(max_messages = batch_size)
         except NotFound as exc:
             _LOG.warning("Topic %s not found. Please create it", topic_name)
             metrics_client.counter("google_injector.connection_error").increment()
@@ -81,7 +91,7 @@ def main():
             continue
 
         process_queue(queue,
-                      ps_topic,
+                      ps_batch,
                       metrics_client=metrics_client)
 
 
